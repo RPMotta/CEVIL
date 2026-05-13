@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Notícias – Sua Fundação</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@300;400;700&family=Open+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="paginas.css" />
+</head>
+<body>
+
+  <div class="barra-top">
+    <div class="container">
+      <div class="barra-top-info">
+        <span>🕐 Segunda a Sexta – 08h às 17h</span>
+        <span>📍 [Seu Endereço] – [Cidade], [UF]</span>
+        <span>📞 [Seu Telefone]</span>
+      </div>
+      <div class="barra-top-redes"><a href="#">Facebook</a><a href="#">Instagram</a><a href="#">Youtube</a></div>
+    </div>
+  </div>
+
+  <header class="header">
+    <div class="container header-inner">
+      <a href="index.html" class="logo">
+        <div class="logo-texto"><span class="nome">Sua Fundação</span><span class="slogan">Transformando Vidas</span></div>
+      </a>
+      <button class="menu-toggle" id="menuToggle"><span></span><span></span><span></span></button>
+      <nav class="nav">
+        <ul id="menuPrincipal">
+          <li><a href="index.html">Início</a></li>
+          <li><a href="sobre.html">Institucional ▾</a>
+            <ul class="dropdown">
+              <li><a href="sobre.html">Sobre a Fundação</a></li>
+              <li><a href="documentos.html">Documentos de Governança</a></li>
+              <li><a href="parcerias.html">Parcerias Institucionais</a></li>
+              <li><a href="transparencia.html">Portal da Transparência</a></li>
+            </ul>
+          </li>
+          <li><a href="#">Nossas Unidades ▾</a>
+            <ul class="dropdown">
+              <li><a href="unidade-1.html">Unidade 1</a></li>
+              <li><a href="unidade-2.html">Unidade 2</a></li>
+              <li><a href="unidade-3.html">Unidade 3</a></li>
+            </ul>
+          </li>
+          <li><a href="noticias.html" class="ativo">Notícias</a></li>
+          <li><a href="causas.html">Solidariedade ▾</a>
+            <ul class="dropdown">
+              <li><a href="causas.html">Nossas Causas</a></li>
+              <li><a href="voluntario.html">Seja um Voluntário</a></li>
+            </ul>
+          </li>
+          <li><a href="contato.html">Contato</a></li>
+          <li><a href="causas.html" class="btn-doe">Doe Agora</a></li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <div class="banner-interno" style="background: linear-gradient(135deg,#1a3a5c,#1e5fa8);">
+    <div class="banner-overlay"></div>
+    <div class="container banner-conteudo">
+      <h1>Notícias</h1>
+      <nav class="breadcrumb"><a href="index.html">Início</a> <span>/</span> <span>Notícias</span></nav>
+    </div>
+  </div>
+
+  <main class="pagina-conteudo">
+    <div class="container">
+
+      <p class="secao-titulo" style="text-align:center;">Fique por Dentro</p>
+      <div class="divisor divisor-centro"></div>
+      <h2 style="text-align:center;color:var(--azul-escuro);margin-bottom:40px;font-size:26px;">Últimas Notícias da Fundação</h2>
+
+      <!-- GRADE DE NOTÍCIAS -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:28px;margin-bottom:50px;">
+
+        <!-- Notícia 1 -->
+        <article style="background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.1);transition:all .3s;">
+          <div style="height:200px;background:linear-gradient(135deg,#1a3a5c,#1e5fa8);"></div>
+          <div style="padding:22px;">
+            <span style="font-size:11.5px;color:var(--dourado);font-weight:700;text-transform:uppercase;letter-spacing:.5px;">01 de Maio, 2025</span>
+            <h3 style="font-size:17px;margin:8px 0 10px;color:var(--azul-escuro);">Título da Notícia 1</h3>
+            <p style="font-size:13px;color:#666;line-height:1.65;margin-bottom:14px;">Resumo da notícia. Substitua este texto pelo conteúdo real da sua publicação. Adicione aqui um parágrafo curto e chamativo.</p>
+            <a href="#" style="font-size:13px;color:var(--azul-medio);font-weight:700;">Leia mais →</a>
+          </div>
+        </article>
+
+        <!-- Notícia 2 -->
+        <article style="background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.1);transition:all .3s;">
+          <div style="height:200px;background:linear-gradient(135deg,#2d5a3d,#1e5fa8);"></div>
+          <div style="padding:22px;">
+            <span style="font-size:11.5px;color:var(--dourado);font-weight:700;text-transform:uppercase;letter-spacing:.5px;">15 de Abril, 2025</span>
+            <h3 style="font-size:17px;margin:8px 0 10px;color:var(--azul-escuro);">Título da Notícia 2</h3>
+            <p style="font-size:13px;color:#666;line-height:1.65;margin-bottom:14px;">Resumo da notícia. Substitua este texto pelo conteúdo real da sua publicação. Adicione aqui um parágrafo curto e chamativo.</p>
+            <a href="#" style="font-size:13px;color:var(--azul-medio);font-weight:700;">Leia mais →</a>
+          </div>
+        </article>
+
+        <!-- Notícia 3 -->
+        <article style="background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.1);transition:all .3s;">
+          <div style="height:200px;background:linear-gradient(135deg,#c8992a,#1a3a5c);"></div>
+          <div style="padding:22px;">
+            <span style="font-size:11.5px;color:var(--dourado);font-weight:700;text-transform:uppercase;letter-spacing:.5px;">02 de Abril, 2025</span>
+            <h3 style="font-size:17px;margin:8px 0 10px;color:var(--azul-escuro);">Título da Notícia 3</h3>
+            <p style="font-size:13px;color:#666;line-height:1.65;margin-bottom:14px;">Resumo da notícia. Substitua este texto pelo conteúdo real da sua publicação. Adicione aqui um parágrafo curto e chamativo.</p>
+            <a href="#" style="font-size:13px;color:var(--azul-medio);font-weight:700;">Leia mais →</a>
+          </div>
+        </article>
+
+        <!-- Notícia 4 -->
+        <article style="background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.1);transition:all .3s;">
+          <div style="height:200px;background:linear-gradient(135deg,#3a1a5c,#1e5fa8);"></div>
+          <div style="padding:22px;">
+            <span style="font-size:11.5px;color:var(--dourado);font-weight:700;text-transform:uppercase;letter-spacing:.5px;">20 de Março, 2025</span>
+            <h3 style="font-size:17px;margin:8px 0 10px;color:var(--azul-escuro);">Título da Notícia 4</h3>
+            <p style="font-size:13px;color:#666;line-height:1.65;margin-bottom:14px;">Resumo da notícia. Substitua este texto pelo conteúdo real da sua publicação. Adicione aqui um parágrafo curto e chamativo.</p>
+            <a href="#" style="font-size:13px;color:var(--azul-medio);font-weight:700;">Leia mais →</a>
+          </div>
+        </article>
+
+        <!-- Notícia 5 -->
+        <article style="background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.1);transition:all .3s;">
+          <div style="height:200px;background:linear-gradient(135deg,#1a5c3a,#1a3a5c);"></div>
+          <div style="padding:22px;">
+            <span style="font-size:11.5px;color:var(--dourado);font-weight:700;text-transform:uppercase;letter-spacing:.5px;">10 de Março, 2025</span>
+            <h3 style="font-size:17px;margin:8px 0 10px;color:var(--azul-escuro);">Título da Notícia 5</h3>
+            <p style="font-size:13px;color:#666;line-height:1.65;margin-bottom:14px;">Resumo da notícia. Substitua este texto pelo conteúdo real da sua publicação. Adicione aqui um parágrafo curto e chamativo.</p>
+            <a href="#" style="font-size:13px;color:var(--azul-medio);font-weight:700;">Leia mais →</a>
+          </div>
+        </article>
+
+        <!-- Notícia 6 -->
+        <article style="background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.1);transition:all .3s;">
+          <div style="height:200px;background:linear-gradient(135deg,#5c3a1a,#1e5fa8);"></div>
+          <div style="padding:22px;">
+            <span style="font-size:11.5px;color:var(--dourado);font-weight:700;text-transform:uppercase;letter-spacing:.5px;">01 de Março, 2025</span>
+            <h3 style="font-size:17px;margin:8px 0 10px;color:var(--azul-escuro);">Título da Notícia 6</h3>
+            <p style="font-size:13px;color:#666;line-height:1.65;margin-bottom:14px;">Resumo da notícia. Substitua este texto pelo conteúdo real da sua publicação. Adicione aqui um parágrafo curto e chamativo.</p>
+            <a href="#" style="font-size:13px;color:var(--azul-medio);font-weight:700;">Leia mais →</a>
+          </div>
+        </article>
+
+      </div>
+
+      <!-- AVISO DE EDIÇÃO -->
+      <div style="background:var(--cinza-claro);border-radius:12px;padding:30px;text-align:center;border-left:4px solid var(--dourado);">
+        <p style="color:#666;font-size:14px;">💡 <strong>Como adicionar notícias:</strong> Copie um dos blocos de artigo acima e substitua o título, data e texto pelo conteúdo real. Para adicionar uma foto, substitua o gradiente do <code>background</code> por <code>background-image: url('imagens/sua-foto.jpg')</code>.</p>
+      </div>
+
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-doe"><div class="container"><h3>Exercite a Solidariedade!</h3><p>Doe até 6% do seu imposto de renda.</p><a href="causas.html" class="btn btn-primary">Doe agora</a></div></div>
+    <div class="footer-top"><div class="container"><div class="footer-grid">
+      <div class="footer-sobre"><div class="logo-texto" style="margin-bottom:15px;"><span class="nome" style="color:#fff;font-size:18px;">Sua Fundação</span><span class="slogan">Transformando Vidas</span></div><p>Entidade filantrópica, sem fins lucrativos.</p><p><strong>CNPJ:</strong> [00.000.000/0001-00]</p></div>
+      <div><h4 class="footer-titulo">Links Rápidos</h4><ul class="footer-links"><li><a href="index.html">→ Início</a></li><li><a href="sobre.html">→ Sobre</a></li><li><a href="noticias.html">→ Notícias</a></li><li><a href="contato.html">→ Contato</a></li></ul></div>
+      <div><h4 class="footer-titulo">Unidades</h4><ul class="footer-links"><li><a href="unidade-1.html">→ Unidade 1</a></li><li><a href="unidade-2.html">→ Unidade 2</a></li><li><a href="unidade-3.html">→ Unidade 3</a></li></ul></div>
+      <div><h4 class="footer-titulo">Contato</h4><div class="footer-contato"><p>📧 [email@fundacao.org.br]</p><p>📞 [Telefone]</p><p>📍 [Endereço]</p></div></div>
+    </div></div></div>
+    <div class="footer-bottom"><div class="container"><p>© 2025 Sua Fundação. Todos os direitos reservados.</p></div></div>
+  </footer>
+
+  <script src="main.js"></script>
+</body>
+</html>
