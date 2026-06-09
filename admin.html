@@ -1070,40 +1070,27 @@ function Tesouraria({ user }) {
 
   async function loadLanc() {
     try {
-      let qFin="/financeiro?order=data.desc,criado_em.desc&limit=500";
-      if(filtros.projeto)    qFin+=`&projeto=eq.${encodeURIComponent(filtros.projeto)}`;
-      if(filtros.dataInicio) qFin+=`&data=gte.${filtros.dataInicio}`;
-      if(filtros.dataFim)    qFin+=`&data=lte.${filtros.dataFim}`;
-      if(filtros.tipo&&filtros.tipo!=="todos") qFin+=`&tipo=eq.${filtros.tipo}`;
+      // Usar RPC para buscar financeiro COM usuario_nome (contorna cache PostgREST)
+      let filtroObj = {};
+      if(filtros.projeto)    filtroObj.p_projeto = filtros.projeto;
+      if(filtros.dataInicio) filtroObj.p_data_inicio = filtros.dataInicio;
+      if(filtros.dataFim)    filtroObj.p_data_fim = filtros.dataFim;
+      if(filtros.tipo&&filtros.tipo!=="todos") filtroObj.p_tipo = filtros.tipo;
 
       let qMens = "/mensalidades?pago=eq.true&select=id,valor,mes,ano,data_pagamento,associados(nome)";
       if(filtros.dataInicio) qMens+=`&data_pagamento=gte.${filtros.dataInicio}`;
       if(filtros.dataFim)    qMens+=`&data_pagamento=lte.${filtros.dataFim}`;
 
-      // Buscar usuario_nome via fetch direto (bypassa cache do supa helper)
-      async function fetchNomes() {
-        try {
-          const r = await fetch(`${SUPA_URL}/rest/v1/financeiro?select=id,usuario_nome&limit=500`, {
-            headers: {
-              apikey: SUPA_KEY,
-              Authorization: `Bearer ${SUPA_KEY}`,
-              "Cache-Control": "no-cache, no-store",
-              "Pragma": "no-cache",
-            }
-          });
-          return await r.json();
-        } catch(_){ return []; }
-      }
-
-      const [finRows, mensRows, nomeRows] = await Promise.all([
-        supa(qFin).catch(()=>[]),
+      const [rpcResult, mensRows] = await Promise.all([
+        fetch(`${SUPA_URL}/rest/v1/rpc/get_lancamentos`, {
+          method:"POST",
+          headers:{apikey:SUPA_KEY,Authorization:`Bearer ${SUPA_KEY}`,"Content-Type":"application/json"},
+          body: JSON.stringify(filtroObj)
+        }).then(r=>r.json()).catch(()=>[]),
         filtros.tipo==="saida" ? Promise.resolve([]) : supa(qMens).catch(()=>[]),
-        fetchNomes(),
       ]);
 
-      const nm={};
-      (Array.isArray(nomeRows)?nomeRows:[]).forEach(r=>{ if(r.id&&r.usuario_nome) nm[r.id]=r.usuario_nome; });
-      const finEnrich=(finRows||[]).map(r=>({...r,usuario_nome:nm[r.id]||r.usuario_nome||null}));
+      const finRows = Array.isArray(rpcResult) ? rpcResult : [];
 
       const mensLanc = (mensRows||[]).map(m=>({
         id:"mens_"+m.id,
@@ -1115,11 +1102,12 @@ function Tesouraria({ user }) {
         usuario_nome:"Sistema", _virtual:true,
       }));
 
-      const todos = [...finEnrich, ...(filtros.tipo==="saida"?[]:mensLanc)]
+      const todos = [...finRows, ...(filtros.tipo==="saida"?[]:mensLanc)]
         .sort((a,b)=>new Date(b.data)-new Date(a.data));
       setLancamentos(todos);
     } catch(e){ console.error("loadLanc:",e); }
   }
+
 
   useEffect(()=>{
     supa("/projetos?status=eq.ativo&select=id,nome").then(r=>setProjetos(r||[])).catch(()=>{});
@@ -1133,19 +1121,17 @@ function Tesouraria({ user }) {
     setLoading(true);
     try {
       const nomeUsuario = user?.nome_completo||user?.usuario||"Sistema";
-      const inserted = await supa("/financeiro",{method:"POST",body:JSON.stringify({
-        descricao:form.descricao,tipo:form.tipo,valor:valorNum,data:form.data,
-        categoria:form.categoria,projeto:form.projeto||null,observacoes:form.observacoes||null,
-      })});
-      // Atualizar usuario_nome em seguida (contorna cache do PostgREST)
-      if(inserted&&inserted[0]&&inserted[0].id){
-        try {
-          await supa(`/financeiro?id=eq.${inserted[0].id}`,{
-            method:"PATCH",
-            body:JSON.stringify({usuario_nome:nomeUsuario})
-          });
-        } catch(_){}
-      }
+      // Inserir com usuario_nome diretamente via fetch (sem supa helper)
+      const insRes = await fetch(`${SUPA_URL}/rest/v1/financeiro`, {
+        method:"POST",
+        headers:{apikey:SUPA_KEY,Authorization:`Bearer ${SUPA_KEY}`,"Content-Type":"application/json","Prefer":"return=representation"},
+        body:JSON.stringify({
+          descricao:form.descricao, tipo:form.tipo, valor:valorNum, data:form.data,
+          categoria:form.categoria, projeto:form.projeto||null,
+          observacoes:form.observacoes||null, usuario_nome:nomeUsuario,
+        })
+      });
+      if(!insRes.ok){ const e=await insRes.json(); throw new Error(e.message||insRes.statusText); }
       showToast(form.tipo==="entrada"?"Entrada registrada!":"Saída registrada!");
       setForm(emptyLanc);
       await loadLanc();
