@@ -1095,9 +1095,14 @@ function Tesouraria({ user }) {
         _virtual:true,
       }));
 
-      const todos=[...( finRows||[]),...(filtros.tipo==="saida"?[]:mensLanc)]
+      const todos=[...(finRows||[]),...(filtros.tipo==="saida"?[]:mensLanc)]
         .sort((a,b)=>new Date(b.data)-new Date(a.data));
-      setLancamentos(todos);
+      // Preservar _usuario_nome que já esteja no estado
+      setLancamentos(prev => {
+        const mapaAnterior = {};
+        prev.forEach(p=>{ if(p._usuario_nome) mapaAnterior[p.id]=p._usuario_nome; });
+        return todos.map(l=>({...l, _usuario_nome: mapaAnterior[l.id]||l._usuario_nome||null}));
+      });
     } catch(e){ console.error(e); }
   }
 
@@ -1112,14 +1117,22 @@ function Tesouraria({ user }) {
     const valorNum = parseFloat(String(form.valor).replace(",","."));
     if(isNaN(valorNum)||valorNum<=0){showToast("Valor inválido.","error");return;}
     setLoading(true);
+    const nomeUsuario = user?.nome_completo || user?.usuario || "Sistema";
     try {
-      const insRes = await supa("/financeiro",{method:"POST",body:JSON.stringify({
+      const resultado = await supa("/financeiro",{method:"POST",body:JSON.stringify({
         descricao:form.descricao, tipo:form.tipo, valor:valorNum, data:form.data,
         categoria:form.categoria, projeto:form.projeto||null, observacoes:form.observacoes||null,
       })});
+      // Adicionar o lançamento no topo do estado com o nome do usuário
+      const novoLanc = {
+        ...(resultado&&resultado[0]?resultado[0]:{}),
+        descricao:form.descricao, tipo:form.tipo, valor:valorNum, data:form.data,
+        categoria:form.categoria, projeto:form.projeto||null,
+        _usuario_nome: nomeUsuario,
+      };
+      setLancamentos(prev => [novoLanc, ...prev]);
       showToast(form.tipo==="entrada"?"Entrada registrada!":"Saída registrada!");
       setForm(emptyLanc);
-      await loadLanc();
       setAba("lancamentos");
     } catch(e){showToast("Erro: "+e.message,"error");}finally{setLoading(false);}
   }
@@ -1239,7 +1252,7 @@ function Tesouraria({ user }) {
             : <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                 <thead>
                   <tr style={{background:C.azulEscuro}}>
-                    {["Data","Tipo","Categoria","Descrição","Projeto","Valor","Ações"].map(h=>(
+                    {["Data","Tipo","Categoria","Descrição","Projeto","Valor","Registrado por","Ações"].map(h=>(
                       <th key={h} style={{padding:"9px 10px",textAlign:"left",color:C.branco,fontWeight:700,fontSize:11}}>{h}</th>
                     ))}
                   </tr>
@@ -1260,6 +1273,9 @@ function Tesouraria({ user }) {
                       <td style={{padding:"8px 10px",color:C.cinzaMedio}}>{l.projeto||"—"}</td>
                       <td style={{padding:"8px 10px",fontWeight:700,color:l.tipo==="entrada"?C.verde:C.vermelho}}>
                         {l.tipo==="saida"?"-":"+"}R$ {Number(l.valor).toLocaleString("pt-BR",{minimumFractionDigits:2})}
+                      </td>
+                      <td style={{padding:"8px 10px",fontSize:11,color:C.cinzaMedio,whiteSpace:"nowrap"}}>
+                        {l._usuario_nome||"—"}
                       </td>
                       <td style={{padding:"8px 10px"}}>
                         <Btn small outline color={C.vermelho} onClick={()=>excluirLanc(l.id)}>Excluir</Btn>
