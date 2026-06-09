@@ -1070,42 +1070,35 @@ function Tesouraria({ user }) {
 
   async function loadLanc() {
     try {
-      // Usar RPC para buscar financeiro COM usuario_nome (contorna cache PostgREST)
-      let filtroObj = {};
-      if(filtros.projeto)    filtroObj.p_projeto = filtros.projeto;
-      if(filtros.dataInicio) filtroObj.p_data_inicio = filtros.dataInicio;
-      if(filtros.dataFim)    filtroObj.p_data_fim = filtros.dataFim;
-      if(filtros.tipo&&filtros.tipo!=="todos") filtroObj.p_tipo = filtros.tipo;
+      let qFin="/financeiro?order=data.desc,criado_em.desc&limit=500";
+      if(filtros.projeto)    qFin+=`&projeto=eq.${encodeURIComponent(filtros.projeto)}`;
+      if(filtros.dataInicio) qFin+=`&data=gte.${filtros.dataInicio}`;
+      if(filtros.dataFim)    qFin+=`&data=lte.${filtros.dataFim}`;
+      if(filtros.tipo&&filtros.tipo!=="todos") qFin+=`&tipo=eq.${filtros.tipo}`;
 
-      let qMens = "/mensalidades?pago=eq.true&select=id,valor,mes,ano,data_pagamento,associados(nome)";
+      let qMens="/mensalidades?pago=eq.true&select=id,valor,mes,ano,data_pagamento,associados(nome)";
       if(filtros.dataInicio) qMens+=`&data_pagamento=gte.${filtros.dataInicio}`;
       if(filtros.dataFim)    qMens+=`&data_pagamento=lte.${filtros.dataFim}`;
 
-      const [rpcResult, mensRows] = await Promise.all([
-        fetch(`${SUPA_URL}/rest/v1/rpc/get_lancamentos`, {
-          method:"POST",
-          headers:{apikey:SUPA_KEY,Authorization:`Bearer ${SUPA_KEY}`,"Content-Type":"application/json"},
-          body: JSON.stringify(filtroObj)
-        }).then(r=>r.json()).catch(()=>[]),
+      const [finRows, mensRows] = await Promise.all([
+        supa(qFin).catch(()=>[]),
         filtros.tipo==="saida" ? Promise.resolve([]) : supa(qMens).catch(()=>[]),
       ]);
 
-      const finRows = Array.isArray(rpcResult) ? rpcResult : [];
-
-      const mensLanc = (mensRows||[]).map(m=>({
+      const mensLanc=(mensRows||[]).map(m=>({
         id:"mens_"+m.id,
         descricao:`Mensalidade — ${m.associados?.nome||"Associado"}`,
         tipo:"entrada", valor:m.valor,
         data:m.data_pagamento||`${m.ano}-${String(m.mes).padStart(2,"0")}-01`,
         categoria:"Mensalidade", projeto:null,
         observacoes:`Ref. ${String(m.mes).padStart(2,"0")}/${m.ano}`,
-        usuario_nome:"Sistema", _virtual:true,
+        _virtual:true,
       }));
 
-      const todos = [...finRows, ...(filtros.tipo==="saida"?[]:mensLanc)]
+      const todos=[...( finRows||[]),...(filtros.tipo==="saida"?[]:mensLanc)]
         .sort((a,b)=>new Date(b.data)-new Date(a.data));
       setLancamentos(todos);
-    } catch(e){ console.error("loadLanc:",e); }
+    } catch(e){ console.error(e); }
   }
 
 
@@ -1120,18 +1113,10 @@ function Tesouraria({ user }) {
     if(isNaN(valorNum)||valorNum<=0){showToast("Valor inválido.","error");return;}
     setLoading(true);
     try {
-      const nomeUsuario = user?.nome_completo||user?.usuario||"Sistema";
-      // Inserir com usuario_nome diretamente via fetch (sem supa helper)
-      const insRes = await fetch(`${SUPA_URL}/rest/v1/financeiro`, {
-        method:"POST",
-        headers:{apikey:SUPA_KEY,Authorization:`Bearer ${SUPA_KEY}`,"Content-Type":"application/json","Prefer":"return=representation"},
-        body:JSON.stringify({
-          descricao:form.descricao, tipo:form.tipo, valor:valorNum, data:form.data,
-          categoria:form.categoria, projeto:form.projeto||null,
-          observacoes:form.observacoes||null, usuario_nome:nomeUsuario,
-        })
-      });
-      if(!insRes.ok){ const e=await insRes.json(); throw new Error(e.message||insRes.statusText); }
+      const insRes = await supa("/financeiro",{method:"POST",body:JSON.stringify({
+        descricao:form.descricao, tipo:form.tipo, valor:valorNum, data:form.data,
+        categoria:form.categoria, projeto:form.projeto||null, observacoes:form.observacoes||null,
+      })});
       showToast(form.tipo==="entrada"?"Entrada registrada!":"Saída registrada!");
       setForm(emptyLanc);
       await loadLanc();
@@ -1254,7 +1239,7 @@ function Tesouraria({ user }) {
             : <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                 <thead>
                   <tr style={{background:C.azulEscuro}}>
-                    {["Data","Tipo","Categoria","Descrição","Projeto","Valor","Lançado por","Ações"].map(h=>(
+                    {["Data","Tipo","Categoria","Descrição","Projeto","Valor","Ações"].map(h=>(
                       <th key={h} style={{padding:"9px 10px",textAlign:"left",color:C.branco,fontWeight:700,fontSize:11}}>{h}</th>
                     ))}
                   </tr>
@@ -2160,8 +2145,9 @@ function TransparenciaFinanceira() {
               </tbody>
               <tfoot>
                 <tr style={{background:C.azulEscuro}}>
-                  <td colSpan={4} style={{padding:"10px 12px",color:C.branco,fontWeight:700,fontSize:12}}>TOTAL DO PERÍODO</td>
+                  <td colSpan={3} style={{padding:"10px 12px",color:C.branco,fontWeight:700,fontSize:12}}>TOTAL DO PERÍODO</td>
                   <td style={{padding:"10px 12px",color:"#90cfa8",fontWeight:700}}>Entradas: {fmt(totEnt)}</td>
+                  <td style={{padding:"10px 12px",color:"#f5a5a5",fontWeight:700}}>Saídas: {fmt(totSai)}</td>
                   <td style={{padding:"10px 12px",color:saldo>=0?"#90cfa8":"#f5a5a5",fontWeight:700,fontSize:14}}>
                     Saldo: {fmt(saldo)}
                   </td>
