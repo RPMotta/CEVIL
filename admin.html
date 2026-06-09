@@ -402,21 +402,9 @@ function Dashboard({ setPage }) {
         ]);
         const now = new Date();
         const mesK = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
-        // Buscar mensalidades pagas e lançamentos financeiros para o mês atual
-        let mensalidasMes = 0, entradasMes = 0, saidasMes = 0;
-        try {
-          const [mRows, fRows] = await Promise.all([
-            supa(`/mensalidades?pago=eq.true&mes=eq.${now.getMonth()+1}&ano=eq.${now.getFullYear()}&select=valor`),
-            supa(`/financeiro?data=gte.${mesK}-01&data=lte.${mesK}-31&select=tipo,valor`),
-          ]);
-          mensalidasMes = (mRows||[]).reduce((s,m)=>s+Number(m.valor||0),0);
-          entradasMes = (fRows||[]).filter(f=>f.tipo==="entrada").reduce((s,f)=>s+Number(f.valor||0),0) + mensalidasMes;
-          saidasMes   = (fRows||[]).filter(f=>f.tipo==="saida").reduce((s,f)=>s+Number(f.valor||0),0);
-        } catch(_){}
         setStats({pessoas:(pRows||[]).length,visitas:(vRows||[]).length,
           visitasMes:(vRows||[]).filter(v=>v.data_visita?.startsWith(mesK)).length,
-          projetos:(prRows||[]).length,
-          entradasMes, saidasMes, mensalidasMes, saldoMes: entradasMes - saidasMes});
+          projetos:(prRows||[]).length});
         const pp={};
         (vRows||[]).forEach(v=>{pp[v.projeto]=(pp[v.projeto]||0)+1;});
         setPP(Object.entries(pp).map(([n,c])=>({nome:n,count:c})).sort((a,b)=>b.count-a.count).slice(0,5));
@@ -435,22 +423,17 @@ function Dashboard({ setPage }) {
   },[]);
 
   const maxMes = Math.max(...porMes.map(m=>m.count),1);
-  const fmt = v => Number(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
   const cards = [
-    {label:"PESSOAS",         value:stats.pessoas,                                color:C.azulMedio},
-    {label:"TOTAL VISITAS",   value:stats.visitas,                                color:"#e07020"},
-    {label:"VISITAS MÊS",     value:stats.visitasMes,                             color:C.azulClaro},
-    {label:"PROJETOS ATIVOS", value:stats.projetos,                               color:"#7c4dbb"},
-    {label:"ENTRADAS MÊS",    value:fmt(stats.entradasMes||0), isMoney:true,      color:C.verde},
-    {label:"SAÍDAS MÊS",      value:fmt(stats.saidasMes||0),   isMoney:true,      color:C.vermelho},
-    {label:"MENSALIDADES PAGAS MÊS", value:fmt(stats.mensalidasMes||0), isMoney:true, color:C.dourado},
-    {label:"SALDO MÊS",       value:fmt(stats.saldoMes||0),    isMoney:true,      color:(stats.saldoMes||0)>=0?C.verde:C.vermelho},
+    {label:"PESSOAS",         value:stats.pessoas,    color:C.azulMedio},
+    {label:"TOTAL VISITAS",   value:stats.visitas,    color:"#e07020"},
+    {label:"VISITAS MÊS",     value:stats.visitasMes, color:C.azulClaro},
+    {label:"PROJETOS ATIVOS", value:stats.projetos,   color:"#7c4dbb"},
   ];
 
   return (
     <div>
       <PageHeader title="Dashboard" subtitle="Visão geral da associação" />
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:16,marginBottom:24,gridTemplateRows:"auto auto"}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:16,marginBottom:24}}>
         {cards.map(s=>(
           <div key={s.label} style={{background:C.branco,borderLeft:`4px solid ${s.color}`,
             borderRadius:10,padding:"20px 20px 16px",boxShadow:"0 2px 8px rgba(0,0,0,.07)"}}>
