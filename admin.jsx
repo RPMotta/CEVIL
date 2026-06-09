@@ -42,17 +42,43 @@ const C = {
   vermelho:   "#c0392b",
 };
 
+// ─── Perfis de acesso ──────────────────────────────────────────────────────
+// super_admin : acesso total — todas as telas, pode editar/excluir tudo
+// tesouraria  : acessa Tesouraria + visualização/pesquisa (sem editar cadastros)
+// visualizador: visualiza e pesquisa tudo, EXCETO Tesouraria; não pode editar/excluir
+
+function usePerfil(user) {
+  const p = user?.perfil || "";
+  return {
+    isSuperAdmin : p === "super_admin",
+    isTesouraria : p === "tesouraria",
+    isVisualizador: p === "visualizador",
+    // helpers de permissão
+    podeEditar    : p === "super_admin",                        // criar/editar/excluir cadastros
+    podeTesouraria: p === "super_admin" || p === "tesouraria",  // ver módulo financeiro
+    podeUsuarios  : p === "super_admin",                        // gerenciar usuários
+    podeProjetos  : p === "super_admin",                        // criar/editar projetos
+    podeConfigs   : p === "super_admin",                        // ver configurações
+    labelPerfil   : p === "super_admin" ? "Super Admin"
+                  : p === "tesouraria"  ? "Tesouraria"
+                  : "Visualizador",
+    corPerfil     : p === "super_admin" ? "#7c4dbb"
+                  : p === "tesouraria"  ? "#c8992a"
+                  : "#1e5fa8",
+  };
+}
+
 const NAV_ITEMS = [
-  { id:"dashboard",        label:"Dashboard",        icon:"⊞", section:"PRINCIPAL" },
-  { id:"novo-cadastro",    label:"Novo Cadastro",     icon:"＋", section:null },
-  { id:"pessoas",          label:"Pessoas",           icon:"●", section:null },
-  { id:"registrar-visita", label:"Registrar Visita",  icon:"✎", section:null },
-  { id:"relatorios",       label:"Relatórios",        icon:"▦", section:null },
-  { id:"tesouraria",       label:"Tesouraria",        icon:"💰", section:null },
-  { id:"minha-conta",      label:"Minha Conta",       icon:"🔑", section:"SISTEMA" },
-  { id:"projetos",         label:"Projetos",          icon:"📋", section:null },
-  { id:"usuarios",         label:"Usuários",          icon:"🔒", section:null, adminOnly:true },
-  { id:"configuracoes",    label:"Configurações",     icon:"⚙", section:null },
+  { id:"dashboard",        label:"Dashboard",        icon:"⊞", section:"PRINCIPAL",  perfis:["super_admin","tesouraria","visualizador"] },
+  { id:"novo-cadastro",    label:"Novo Cadastro",     icon:"＋", section:null,         perfis:["super_admin"] },
+  { id:"pessoas",          label:"Pessoas",           icon:"●", section:null,         perfis:["super_admin","visualizador"] },
+  { id:"registrar-visita", label:"Registrar Visita",  icon:"✎", section:null,         perfis:["super_admin"] },
+  { id:"relatorios",       label:"Relatórios",        icon:"▦", section:null,         perfis:["super_admin","visualizador"] },
+  { id:"tesouraria",       label:"Tesouraria",        icon:"💰", section:null,         perfis:["super_admin","tesouraria"] },
+  { id:"minha-conta",      label:"Minha Conta",       icon:"🔑", section:"SISTEMA",    perfis:["super_admin","tesouraria","visualizador"] },
+  { id:"projetos",         label:"Projetos",          icon:"📋", section:null,         perfis:["super_admin"] },
+  { id:"usuarios",         label:"Usuários",          icon:"🔒", section:null,         perfis:["super_admin"] },
+  { id:"configuracoes",    label:"Configurações",     icon:"⚙", section:null,         perfis:["super_admin"] },
 ];
 
 // ─── Componentes base ───────────────────────────────────────────────────────
@@ -206,8 +232,7 @@ function Login({ onLogin }) {
 // ─── LAYOUT ─────────────────────────────────────────────────────────────────
 
 function Layout({ user, page, setPage, onLogout, children }) {
-  const isAdmin = user.perfil === "admin";
-  const isTes   = user.perfil === "tesouraria" || isAdmin;
+  const { labelPerfil, corPerfil } = usePerfil(user);
 
   return (
     <div style={{display:"flex",minHeight:"100vh",background:C.cinzaClaro,fontFamily:"'Open Sans',sans-serif"}}>
@@ -231,7 +256,7 @@ function Layout({ user, page, setPage, onLogout, children }) {
 
         {/* Nav */}
         <nav style={{flex:1,padding:"8px 0",overflowY:"auto"}}>
-          {NAV_ITEMS.filter(n => !n.adminOnly || isAdmin).map((item,i,arr) => {
+          {NAV_ITEMS.filter(n => n.perfis.includes(user.perfil)).map((item,i,arr) => {
             const prev = arr[i-1];
             return (
               <div key={item.id}>
@@ -272,9 +297,9 @@ function Layout({ user, page, setPage, onLogout, children }) {
             <span>📍 Rua Graciosa 227 – Palhoça, SC</span>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <span style={{background:C.dourado,color:C.azulEscuro,fontSize:11,fontWeight:700,
+            <span style={{background:corPerfil,color:C.branco,fontSize:11,fontWeight:700,
               padding:"3px 12px",borderRadius:20,textTransform:"uppercase"}}>
-              {user.perfil === "admin" ? "Admin" : user.perfil === "tesouraria" ? "Tesouraria" : "Normal"}
+              {labelPerfil}
             </span>
             <a href="index.html" style={{color:"rgba(255,255,255,.65)",fontSize:12,padding:"4px 10px"}}>← Site</a>
             <button onClick={onLogout}
@@ -533,7 +558,7 @@ function NovoCadastro({ onSaved }) {
 
 // ─── PESSOAS ────────────────────────────────────────────────────────────────
 
-function Pessoas({ setPage, setPessoaId }) {
+function Pessoas({ setPage, setPessoaId, user }) {
   const [nome,setNome]       = useState("");
   const [projeto,setProjeto] = useState("");
   const [cidade,setCidade]   = useState("");
@@ -611,7 +636,9 @@ function Pessoas({ setPage, setPessoaId }) {
                       <td style={{padding:"9px 12px"}}>
                         <div style={{display:"flex",gap:6}}>
                           <Btn small outline color={C.azulMedio} onClick={()=>{setPessoaId(p.id);setPage("perfil-pessoa");}}>Ver</Btn>
-                          <Btn small outline color={C.vermelho} onClick={()=>excluir(p.id)}>Excluir</Btn>
+                          {usePerfil(user).podeEditar && (
+                            <Btn small outline color={C.vermelho} onClick={()=>excluir(p.id)}>Excluir</Btn>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -626,7 +653,7 @@ function Pessoas({ setPage, setPessoaId }) {
 
 // ─── PERFIL PESSOA ───────────────────────────────────────────────────────────
 
-function PerfilPessoa({ pessoaId, setPage }) {
+function PerfilPessoa({ pessoaId, setPage, user }) {
   const [pessoa,setPessoa]   = useState(null);
   const [visitas,setVisitas] = useState([]);
   const [projetos,setProjetos] = useState([]);
@@ -681,6 +708,7 @@ function PerfilPessoa({ pessoaId, setPage }) {
           </div>
         </Card>
       </div>
+      {usePerfil(user).podeEditar && (
       <Card style={{marginBottom:20}}>
         <SecaoTitulo icon="➕">Registrar Nova Visita</SecaoTitulo>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
@@ -691,6 +719,7 @@ function PerfilPessoa({ pessoaId, setPage }) {
         <Textarea label="Observações" value={nova.observacoes} onChange={v=>setNova(p=>({...p,observacoes:v}))} placeholder="..." rows={2} />
         <div style={{marginTop:14}}><Btn onClick={adicionarVisita} disabled={loading} small>+ Adicionar Visita</Btn></div>
       </Card>
+      )}
       <Card>
         <SecaoTitulo icon="📋">Histórico de Visitas ({visitas.length})</SecaoTitulo>
         <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
@@ -1234,7 +1263,7 @@ function Projetos() {
 
 function Usuarios() {
   const [lista,setLista] = useState([]);
-  const [form,setForm]   = useState({nome_completo:"",usuario:"",senha:"",confirmSenha:"",perfil:"normal"});
+  const [form,setForm]   = useState({nome_completo:"",usuario:"",senha:"",confirmSenha:"",perfil:"visualizador"});
   const [toast,showToast] = useToast();
 
   async function load(){ const r=await supa("/sistema_usuarios?select=id,nome_completo,usuario,perfil,ativo,criado_em&order=nome_completo.asc"); setLista(r||[]); }
@@ -1248,7 +1277,7 @@ function Usuarios() {
     try {
       await supa("/sistema_usuarios",{method:"POST",body:JSON.stringify({nome_completo,usuario,senha_hash:hashSimple(senha),perfil,ativo:true})});
       showToast("Usuário criado!");
-      setForm({nome_completo:"",usuario:"",senha:"",confirmSenha:"",perfil:"normal"});load();
+      setForm({nome_completo:"",usuario:"",senha:"",confirmSenha:"",perfil:"visualizador"});load();
     } catch(e){showToast(e.message.includes("unique")?"Usuário já existe.":"Erro.","error");}
   }
 
@@ -1274,7 +1303,7 @@ function Usuarios() {
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
             <Input label="Confirmar Senha" value={form.confirmSenha} onChange={v=>setForm(p=>({...p,confirmSenha:v}))} type="password" required />
             <Select label="Perfil" value={form.perfil} onChange={v=>setForm(p=>({...p,perfil:v}))} required
-              options={[{value:"normal",label:"👤 Normal"},{value:"tesouraria",label:"💰 Tesouraria"},{value:"admin",label:"👑 Admin"}]} />
+              options={[{value:"visualizador",label:"👁 Visualizador"},{value:"tesouraria",label:"💰 Tesouraria"},{value:"super_admin",label:"👑 Super Admin"}]} />
           </div>
         </div>
         <div style={{marginTop:16}}><Btn onClick={criar} color="#7c4dbb">+ Criar Usuário</Btn></div>
@@ -1296,10 +1325,10 @@ function Usuarios() {
                   <td style={{padding:"8px 12px",color:C.cinzaMedio}}>{u.usuario}</td>
                   <td style={{padding:"8px 12px"}}>
                     <span style={{
-                      background:u.perfil==="admin"?"#f0eaff":u.perfil==="tesouraria"?"#fff8e6":"#e8f4ec",
-                      color:u.perfil==="admin"?"#7c4dbb":u.perfil==="tesouraria"?C.dourado:C.verde,
+                      background:u.perfil==="super_admin"?"#f0eaff":u.perfil==="tesouraria"?"#fff8e6":"#e8f2fc",
+                      color:u.perfil==="super_admin"?"#7c4dbb":u.perfil==="tesouraria"?C.dourado:C.azulMedio,
                       padding:"2px 8px",borderRadius:12,fontSize:12,fontWeight:700}}>
-                      {u.perfil==="admin"?"Admin":u.perfil==="tesouraria"?"Tesouraria":"Normal"}
+                      {u.perfil==="super_admin"?"👑 Super Admin":u.perfil==="tesouraria"?"💰 Tesouraria":"👁 Visualizador"}
                     </span>
                   </td>
                   <td style={{padding:"8px 12px"}}>
@@ -1351,7 +1380,7 @@ function MinhaConta({ user }) {
           <div style={{fontSize:14,lineHeight:2.2}}>
             <div><strong>Nome:</strong> {user.nome_completo}</div>
             <div><strong>Usuário:</strong> {user.usuario}</div>
-            <div><strong>Perfil:</strong> {user.perfil==="admin"?"Administrador":user.perfil==="tesouraria"?"Tesouraria":"Normal"}</div>
+            <div><strong>Perfil:</strong> {user.perfil==="super_admin"?"Super Admin":user.perfil==="tesouraria"?"Tesouraria":"Visualizador"}</div>
           </div>
         </Card>
         <Card>
@@ -1431,14 +1460,19 @@ ALTER TABLE financeiro       DISABLE ROW LEVEL SECURITY;
 ALTER TABLE sistema_usuarios DISABLE ROW LEVEL SECURITY;
 
 -- Usuários iniciais
--- admin / admin123
+-- super_admin / admin123
 INSERT INTO sistema_usuarios (nome_completo,usuario,senha_hash,perfil)
-VALUES ('Administrador','admin','39c43b7d','admin')
+VALUES ('Administrador','admin','39c43b7d','super_admin')
 ON CONFLICT (usuario) DO NOTHING;
 
 -- tesouraria / tesouraria123
 INSERT INTO sistema_usuarios (nome_completo,usuario,senha_hash,perfil)
 VALUES ('Tesouraria CEVIL','tesouraria','3bb05aa1','tesouraria')
+ON CONFLICT (usuario) DO NOTHING;
+
+-- visualizador / cevil2026
+INSERT INTO sistema_usuarios (nome_completo,usuario,senha_hash,perfil)
+VALUES ('Visualizador','visualizador','6da329f9','visualizador')
 ON CONFLICT (usuario) DO NOTHING;`;
 
 function Configuracoes() {
@@ -1459,8 +1493,9 @@ function Configuracoes() {
         <div style={{marginTop:16,fontSize:13,color:C.cinzaMedio,lineHeight:1.8}}>
           <strong style={{color:C.azulEscuro}}>Como usar:</strong><br/>
           1. Supabase → SQL Editor → Cole e execute<br/>
-          2. Login inicial: <code style={{background:C.cinzaClaro,padding:"1px 6px",borderRadius:4}}>admin</code> / <code style={{background:C.cinzaClaro,padding:"1px 6px",borderRadius:4}}>admin123</code><br/>
-          3. Tesouraria: <code style={{background:C.cinzaClaro,padding:"1px 6px",borderRadius:4}}>tesouraria</code> / <code style={{background:C.cinzaClaro,padding:"1px 6px",borderRadius:4}}>tesouraria123</code>
+          2. <strong>Super Admin:</strong> <code style={{background:C.cinzaClaro,padding:"1px 6px",borderRadius:4}}>admin</code> / <code style={{background:C.cinzaClaro,padding:"1px 6px",borderRadius:4}}>admin123</code><br/>
+          3. <strong>Tesouraria:</strong> <code style={{background:C.cinzaClaro,padding:"1px 6px",borderRadius:4}}>tesouraria</code> / <code style={{background:C.cinzaClaro,padding:"1px 6px",borderRadius:4}}>tesouraria123</code><br/>
+          4. <strong>Visualizador:</strong> <code style={{background:C.cinzaClaro,padding:"1px 6px",borderRadius:4}}>visualizador</code> / <code style={{background:C.cinzaClaro,padding:"1px 6px",borderRadius:4}}>cevil2026</code>
         </div>
       </Card>
     </div>
@@ -1476,22 +1511,31 @@ export default function App() {
 
   if(!user) return <Login onLogin={setUser} />;
 
-  const isAdmin = user.perfil==="admin";
-  const isTes   = user.perfil==="tesouraria"||isAdmin;
+  const { podeEditar, podeTesouraria, podeUsuarios, podeProjetos, podeConfigs } = usePerfil(user);
+
+  function Bloqueado({ msg }) {
+    return (
+      <div style={{textAlign:"center",padding:"80px 40px"}}>
+        <div style={{fontSize:48,marginBottom:16}}>🔒</div>
+        <h2 style={{color:C.azulEscuro,fontFamily:"'Merriweather',serif",marginBottom:8}}>Acesso Restrito</h2>
+        <p style={{color:C.cinzaMedio,fontSize:14}}>{msg || "Seu perfil não tem permissão para acessar esta área."}</p>
+      </div>
+    );
+  }
 
   function renderPage(){
     switch(page){
       case "dashboard":        return <Dashboard setPage={setPage} />;
-      case "novo-cadastro":    return <NovoCadastro onSaved={()=>setPage("pessoas")} />;
-      case "pessoas":          return <Pessoas setPage={setPage} setPessoaId={setPessoaId} />;
-      case "perfil-pessoa":    return <PerfilPessoa pessoaId={pessoaId} setPage={setPage} />;
-      case "registrar-visita": return <RegistrarVisita />;
-      case "relatorios":       return <Relatorios />;
-      case "tesouraria":       return isTes ? <Tesouraria /> : <div style={{color:C.vermelho,padding:40}}>Acesso restrito à tesouraria.</div>;
-      case "minha-conta":      return <MinhaConta user={user} />;
-      case "projetos":         return <Projetos />;
-      case "usuarios":         return isAdmin ? <Usuarios /> : <div style={{color:C.vermelho,padding:40}}>Acesso negado.</div>;
-      case "configuracoes":    return <Configuracoes />;
+      case "novo-cadastro":    return podeEditar     ? <NovoCadastro onSaved={()=>setPage("pessoas")} />   : <Bloqueado msg="Somente o Super Admin pode cadastrar pessoas." />;
+      case "pessoas":          return                  <Pessoas setPage={setPage} setPessoaId={setPessoaId} user={user} />;
+      case "perfil-pessoa":    return                  <PerfilPessoa pessoaId={pessoaId} setPage={setPage} user={user} />;
+      case "registrar-visita": return podeEditar     ? <RegistrarVisita />                                 : <Bloqueado msg="Somente o Super Admin pode registrar visitas." />;
+      case "relatorios":       return                  <Relatorios />;
+      case "tesouraria":       return podeTesouraria ? <Tesouraria />                                      : <Bloqueado msg="Esta área é exclusiva para Tesouraria e Super Admin." />;
+      case "minha-conta":      return                  <MinhaConta user={user} />;
+      case "projetos":         return podeProjetos   ? <Projetos />                                        : <Bloqueado msg="Somente o Super Admin pode gerenciar projetos." />;
+      case "usuarios":         return podeUsuarios   ? <Usuarios />                                        : <Bloqueado msg="Somente o Super Admin pode gerenciar usuários." />;
+      case "configuracoes":    return podeConfigs    ? <Configuracoes />                                   : <Bloqueado msg="Somente o Super Admin pode acessar as configurações." />;
       default:                 return <Dashboard setPage={setPage} />;
     }
   }
