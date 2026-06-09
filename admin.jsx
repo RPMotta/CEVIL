@@ -59,6 +59,7 @@ function usePerfil(user) {
     podeUsuarios  : p === "super_admin",                        // gerenciar usuários
     podeProjetos  : p === "super_admin",                        // criar/editar projetos
     podeConfigs   : p === "super_admin",                        // ver configurações
+    podeEditarSite: p === "super_admin",                        // editor completo do site
     labelPerfil   : p === "super_admin" ? "Super Admin"
                   : p === "tesouraria"  ? "Tesouraria"
                   : "Visualizador",
@@ -78,6 +79,7 @@ const NAV_ITEMS = [
   { id:"minha-conta",      label:"Minha Conta",       icon:"🔑", section:"SISTEMA",    perfis:["super_admin","tesouraria","visualizador"] },
   { id:"projetos",         label:"Projetos",          icon:"📋", section:null,         perfis:["super_admin"] },
   { id:"usuarios",         label:"Usuários",          icon:"🔒", section:null,         perfis:["super_admin"] },
+  { id:"editor-site",      label:"Editor do Site",    icon:"🌐", section:null,         perfis:["super_admin"] },
   { id:"configuracoes",    label:"Configurações",     icon:"⚙", section:null,         perfis:["super_admin"] },
 ];
 
@@ -1473,7 +1475,682 @@ ON CONFLICT (usuario) DO NOTHING;
 -- visualizador / cevil2026
 INSERT INTO sistema_usuarios (nome_completo,usuario,senha_hash,perfil)
 VALUES ('Visualizador','visualizador','6da329f9','visualizador')
-ON CONFLICT (usuario) DO NOTHING;`;
+ON CONFLICT (usuario) DO NOTHING;
+
+-- ══════════════════════════════════════
+-- TABELAS DO EDITOR DO SITE
+-- ══════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS site_noticias (
+  id bigserial primary key,
+  titulo text not null,
+  resumo text not null,
+  conteudo text,
+  imagem_url text,
+  categoria text,
+  data_publicacao date default now(),
+  destaque boolean default false,
+  criado_em timestamptz default now()
+);
+
+CREATE TABLE IF NOT EXISTS site_membros (
+  id bigserial primary key,
+  nome text not null,
+  cargo text not null,
+  grupo text not null,
+  descricao text,
+  foto_url text,
+  ordem integer default 0,
+  criado_em timestamptz default now()
+);
+
+CREATE TABLE IF NOT EXISTS site_institucional (
+  chave text primary key,
+  valor text,
+  atualizado_em timestamptz default now()
+);
+
+CREATE TABLE IF NOT EXISTS site_causas (
+  id bigserial primary key,
+  titulo text not null,
+  descricao text not null,
+  imagem_url text,
+  meta_valor numeric(12,2) default 0,
+  arrecadado numeric(12,2) default 0,
+  ativo boolean default true,
+  criado_em timestamptz default now()
+);
+
+CREATE TABLE IF NOT EXISTS site_parceiros (
+  id bigserial primary key,
+  nome text not null,
+  tipo text default 'empresarial',
+  logo_url text,
+  site_url text,
+  descricao text,
+  criado_em timestamptz default now()
+);
+
+CREATE TABLE IF NOT EXISTS site_config (
+  chave text primary key,
+  valor text,
+  atualizado_em timestamptz default now()
+);
+
+CREATE TABLE IF NOT EXISTS site_galeria (
+  id bigserial primary key,
+  titulo text,
+  url text not null,
+  categoria text,
+  descricao text,
+  criado_em timestamptz default now()
+);
+
+-- Desabilitar RLS nas tabelas do site
+ALTER TABLE site_noticias    DISABLE ROW LEVEL SECURITY;
+ALTER TABLE site_membros     DISABLE ROW LEVEL SECURITY;
+ALTER TABLE site_institucional DISABLE ROW LEVEL SECURITY;
+ALTER TABLE site_causas      DISABLE ROW LEVEL SECURITY;
+ALTER TABLE site_parceiros   DISABLE ROW LEVEL SECURITY;
+ALTER TABLE site_config      DISABLE ROW LEVEL SECURITY;
+ALTER TABLE site_galeria     DISABLE ROW LEVEL SECURITY;`;
+
+
+// ─── EDITOR DO SITE ──────────────────────────────────────────────────────────
+
+function EditorSite() {
+  const [aba, setAba] = useState("noticias");
+  const [toast, showToast] = useToast();
+
+  const abas = [
+    { id:"noticias",       icon:"📰", label:"Notícias" },
+    { id:"membros",        icon:"👥", label:"Diretoria / Conselhos" },
+    { id:"institucional",  icon:"🏛", label:"Textos Institucionais" },
+    { id:"causas",         icon:"🤝", label:"Causas" },
+    { id:"parceiros",      icon:"🏢", label:"Parceiros" },
+    { id:"contato",        icon:"📞", label:"Dados de Contato" },
+    { id:"galeria",        icon:"🖼", label:"Galeria de Imagens" },
+  ];
+
+  return (
+    <div>
+      <Toast {...(toast||{})} />
+      <PageHeader title="Editor do Site" subtitle="Gerencie todo o conteúdo do site público" />
+
+      {/* Abas horizontais */}
+      <div style={{display:"flex",gap:0,marginBottom:24,borderBottom:`2px solid #e8e8e8`,flexWrap:"wrap"}}>
+        {abas.map(a=>(
+          <button key={a.id} onClick={()=>setAba(a.id)}
+            style={{padding:"10px 16px",background:"transparent",border:"none",
+              borderBottom:`3px solid ${aba===a.id?C.dourado:"transparent"}`,
+              color:aba===a.id?C.azulEscuro:C.cinzaMedio,
+              fontWeight:aba===a.id?700:400,fontSize:13,cursor:"pointer",
+              marginBottom:-2,fontFamily:"inherit",display:"flex",alignItems:"center",gap:6}}>
+            {a.icon} {a.label}
+          </button>
+        ))}
+      </div>
+
+      {aba==="noticias"      && <EditorNoticias showToast={showToast} />}
+      {aba==="membros"       && <EditorMembros showToast={showToast} />}
+      {aba==="institucional" && <EditorInstitucional showToast={showToast} />}
+      {aba==="causas"        && <EditorCausas showToast={showToast} />}
+      {aba==="parceiros"     && <EditorParceiros showToast={showToast} />}
+      {aba==="contato"       && <EditorContato showToast={showToast} />}
+      {aba==="galeria"       && <EditorGaleria showToast={showToast} />}
+    </div>
+  );
+}
+
+// ── Editor Notícias ──────────────────────────────────────────────────────────
+
+function EditorNoticias({ showToast }) {
+  const emptyForm = { titulo:"", resumo:"", conteudo:"", imagem_url:"", categoria:"", data_publicacao: new Date().toISOString().split("T")[0], destaque: false };
+  const [lista, setLista]   = useState([]);
+  const [form, setForm]     = useState(emptyForm);
+  const [editId, setEditId] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const set = k => v => setForm(p=>({...p,[k]:v}));
+
+  async function load() {
+    const r = await supa("/site_noticias?select=*&order=data_publicacao.desc");
+    setLista(r||[]);
+  }
+  useEffect(()=>{ load(); },[]);
+
+  async function salvar() {
+    if(!form.titulo||!form.resumo){showToast("Título e resumo obrigatórios.","error");return;}
+    setLoading(true);
+    try {
+      if(editId) {
+        await supa(`/site_noticias?id=eq.${editId}`,{method:"PATCH",body:JSON.stringify(form)});
+        showToast("Notícia atualizada!");
+      } else {
+        await supa("/site_noticias",{method:"POST",body:JSON.stringify(form)});
+        showToast("Notícia publicada!");
+      }
+      setForm(emptyForm); setEditId(null); load();
+    } catch(e){showToast("Erro: "+e.message,"error");}
+    finally{setLoading(false);}
+  }
+
+  function editar(n) { setForm({titulo:n.titulo,resumo:n.resumo,conteudo:n.conteudo||"",imagem_url:n.imagem_url||"",categoria:n.categoria||"",data_publicacao:n.data_publicacao,destaque:n.destaque||false}); setEditId(n.id); }
+
+  async function excluir(id) {
+    if(!confirm("Excluir esta notícia?")) return;
+    await supa(`/site_noticias?id=eq.${id}`,{method:"DELETE",prefer:""});
+    showToast("Notícia excluída."); load();
+  }
+
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1.4fr",gap:24,alignItems:"start"}}>
+      {/* Formulário */}
+      <Card>
+        <SecaoTitulo icon="📰">{editId?"Editar Notícia":"Nova Notícia"}</SecaoTitulo>
+        <div style={{display:"flex",flexDirection:"column",gap:13}}>
+          <Input label="Título *" value={form.titulo} onChange={set("titulo")} placeholder="Título da notícia" required />
+          <Input label="Categoria" value={form.categoria} onChange={set("categoria")} placeholder="Ex: Educação, Saúde..." />
+          <Input label="Data de Publicação" value={form.data_publicacao} onChange={set("data_publicacao")} type="date" />
+          <Input label="URL da Imagem" value={form.imagem_url} onChange={set("imagem_url")} placeholder="https://..." />
+          {form.imagem_url && (
+            <img src={form.imagem_url} alt="preview" onError={e=>e.target.style.display="none"}
+              style={{width:"100%",height:120,objectFit:"cover",borderRadius:6,border:`1px solid ${C.cinzaClaro}`}} />
+          )}
+          <Textarea label="Resumo *" value={form.resumo} onChange={set("resumo")} placeholder="Texto curto exibido na listagem..." rows={3} />
+          <Textarea label="Conteúdo completo" value={form.conteudo} onChange={set("conteudo")} placeholder="Texto completo da notícia (suporta HTML básico)..." rows={6} />
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <input type="checkbox" id="destaque" checked={form.destaque} onChange={e=>set("destaque")(e.target.checked)}
+              style={{width:16,height:16,cursor:"pointer"}} />
+            <label htmlFor="destaque" style={{fontSize:13,fontWeight:600,color:C.cinzaEscuro,cursor:"pointer"}}>Notícia em destaque (aparece no topo)</label>
+          </div>
+          <div style={{display:"flex",gap:10,paddingTop:4}}>
+            <Btn onClick={salvar} disabled={loading} color={C.azulMedio}>
+              {loading?"Salvando...":editId?"💾 Salvar Edição":"📰 Publicar"}
+            </Btn>
+            {editId && <Btn outline color={C.cinzaMedio} onClick={()=>{setForm(emptyForm);setEditId(null);}}>Cancelar</Btn>}
+          </div>
+        </div>
+      </Card>
+
+      {/* Lista */}
+      <Card>
+        <SecaoTitulo icon="📋">Notícias Publicadas ({lista.length})</SecaoTitulo>
+        {lista.length===0 ? <p style={{color:C.cinzaMedio,fontSize:13}}>Nenhuma notícia.</p>
+          : lista.map((n,i)=>(
+            <div key={n.id} style={{padding:"12px 0",borderBottom:`1px solid ${C.cinzaClaro}`,display:"flex",gap:12,alignItems:"flex-start"}}>
+              {n.imagem_url && <img src={n.imagem_url} alt="" onError={e=>e.target.style.display="none"} style={{width:60,height:50,objectFit:"cover",borderRadius:5,flexShrink:0}} />}
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:3,flexWrap:"wrap"}}>
+                  {n.destaque && <span style={{background:C.dourado,color:C.branco,fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:4}}>DESTAQUE</span>}
+                  {n.categoria && <span style={{background:C.cinzaClaro,color:C.cinzaMedio,fontSize:10,padding:"1px 6px",borderRadius:4}}>{n.categoria}</span>}
+                  <span style={{fontSize:11,color:C.cinzaMedio}}>{n.data_publicacao?new Date(n.data_publicacao+"T12:00:00").toLocaleDateString("pt-BR"):""}</span>
+                </div>
+                <div style={{fontWeight:700,fontSize:13,color:C.azulEscuro,lineHeight:1.3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.titulo}</div>
+                <div style={{fontSize:12,color:C.cinzaMedio,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.resumo}</div>
+              </div>
+              <div style={{display:"flex",gap:6,flexShrink:0}}>
+                <Btn small outline color={C.azulMedio} onClick={()=>editar(n)}>✏️</Btn>
+                <Btn small outline color={C.vermelho} onClick={()=>excluir(n.id)}>🗑</Btn>
+              </div>
+            </div>
+          ))}
+      </Card>
+    </div>
+  );
+}
+
+// ── Editor Membros ───────────────────────────────────────────────────────────
+
+function EditorMembros({ showToast }) {
+  const emptyForm = { nome:"", cargo:"", grupo:"diretoria_executiva", descricao:"", foto_url:"", ordem: 0 };
+  const [lista, setLista]   = useState([]);
+  const [form, setForm]     = useState(emptyForm);
+  const [editId, setEditId] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const set = k => v => setForm(p=>({...p,[k]:v}));
+
+  const GRUPOS = [
+    {value:"diretoria_executiva", label:"Diretoria Executiva"},
+    {value:"conselho_curador",    label:"Conselho Curador"},
+    {value:"conselho_fiscal",     label:"Conselho Fiscal"},
+  ];
+
+  async function load() { const r=await supa("/site_membros?select=*&order=grupo.asc,ordem.asc"); setLista(r||[]); }
+  useEffect(()=>{load();},[]);
+
+  async function salvar() {
+    if(!form.nome||!form.cargo){showToast("Nome e cargo obrigatórios.","error");return;}
+    setLoading(true);
+    try {
+      const payload = {...form, ordem: Number(form.ordem)||0};
+      if(editId) { await supa(`/site_membros?id=eq.${editId}`,{method:"PATCH",body:JSON.stringify(payload)}); showToast("Membro atualizado!"); }
+      else        { await supa("/site_membros",{method:"POST",body:JSON.stringify(payload)}); showToast("Membro adicionado!"); }
+      setForm(emptyForm); setEditId(null); load();
+    } catch(e){showToast("Erro.","error");}
+    finally{setLoading(false);}
+  }
+
+  function editar(m) { setForm({nome:m.nome,cargo:m.cargo,grupo:m.grupo,descricao:m.descricao||"",foto_url:m.foto_url||"",ordem:m.ordem||0}); setEditId(m.id); }
+
+  async function excluir(id) {
+    if(!confirm("Excluir membro?")) return;
+    await supa(`/site_membros?id=eq.${id}`,{method:"DELETE",prefer:""});
+    showToast("Excluído."); load();
+  }
+
+  const grupoLabel = v => GRUPOS.find(g=>g.value===v)?.label || v;
+  const porGrupo = GRUPOS.map(g=>({...g, membros: lista.filter(m=>m.grupo===g.value)}));
+
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1.4fr",gap:24,alignItems:"start"}}>
+      <Card>
+        <SecaoTitulo icon="👥">{editId?"Editar Membro":"Novo Membro"}</SecaoTitulo>
+        <div style={{display:"flex",flexDirection:"column",gap:13}}>
+          <Select label="Grupo" value={form.grupo} onChange={set("grupo")} options={GRUPOS} />
+          <Input label="Nome *" value={form.nome} onChange={set("nome")} placeholder="Nome completo" required />
+          <Input label="Cargo *" value={form.cargo} onChange={set("cargo")} placeholder="Ex: Presidente, Conselheiro..." required />
+          <Input label="URL da Foto" value={form.foto_url} onChange={set("foto_url")} placeholder="https://..." />
+          {form.foto_url && <img src={form.foto_url} alt="preview" onError={e=>e.target.style.display="none"} style={{width:80,height:80,objectFit:"cover",borderRadius:"50%",border:`3px solid ${C.dourado}`}} />}
+          <Textarea label="Descrição / Bio" value={form.descricao} onChange={set("descricao")} placeholder="Formação, cargo, área de atuação..." rows={3} />
+          <Input label="Ordem de exibição" value={String(form.ordem)} onChange={v=>set("ordem")(Number(v)||0)} type="number" placeholder="0" />
+          <div style={{display:"flex",gap:10}}>
+            <Btn onClick={salvar} disabled={loading} color={C.azulMedio}>{loading?"Salvando...":editId?"💾 Salvar":"➕ Adicionar"}</Btn>
+            {editId && <Btn outline color={C.cinzaMedio} onClick={()=>{setForm(emptyForm);setEditId(null);}}>Cancelar</Btn>}
+          </div>
+        </div>
+      </Card>
+
+      <div style={{display:"flex",flexDirection:"column",gap:16}}>
+        {porGrupo.map(g=>(
+          <Card key={g.value}>
+            <SecaoTitulo icon="👥">{g.label} ({g.membros.length})</SecaoTitulo>
+            {g.membros.length===0 ? <p style={{color:C.cinzaMedio,fontSize:13}}>Nenhum membro.</p>
+              : g.membros.map(m=>(
+                <div key={m.id} style={{display:"flex",gap:12,alignItems:"center",padding:"10px 0",borderBottom:`1px solid ${C.cinzaClaro}`}}>
+                  <div style={{width:44,height:44,borderRadius:"50%",background:C.cinzaClaro,flexShrink:0,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>
+                    {m.foto_url ? <img src={m.foto_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={e=>e.target.style.display="none"} /> : "👤"}
+                  </div>
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:700,fontSize:13,color:C.azulEscuro}}>{m.nome}</div>
+                    <div style={{fontSize:12,color:C.dourado,fontWeight:600}}>{m.cargo}</div>
+                  </div>
+                  <div style={{display:"flex",gap:6}}>
+                    <Btn small outline color={C.azulMedio} onClick={()=>editar(m)}>✏️</Btn>
+                    <Btn small outline color={C.vermelho} onClick={()=>excluir(m.id)}>🗑</Btn>
+                  </div>
+                </div>
+              ))}
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Editor Institucional ─────────────────────────────────────────────────────
+
+function EditorInstitucional({ showToast }) {
+  const CAMPOS = [
+    { key:"historia",   label:"Nossa História",   rows:6 },
+    { key:"missao",     label:"Missão",            rows:4 },
+    { key:"visao",      label:"Visão",             rows:4 },
+    { key:"valores",    label:"Valores",           rows:5 },
+    { key:"sobre_hero", label:"Texto do Banner Principal (hero)", rows:3 },
+    { key:"timeline",   label:"Linha do Tempo (um item por linha: ANO|Descrição)", rows:8 },
+  ];
+  const [dados, setDados]   = useState({});
+  const [saving, setSaving] = useState(false);
+
+  async function load() {
+    try {
+      const r = await supa("/site_institucional?select=chave,valor");
+      const obj = {}; (r||[]).forEach(x=>{obj[x.chave]=x.valor;}); setDados(obj);
+    } catch(_){}
+  }
+  useEffect(()=>{load();},[]);
+
+  async function salvarTudo() {
+    setSaving(true);
+    try {
+      for(const [chave, valor] of Object.entries(dados)) {
+        await supa("/site_institucional", {
+          method:"POST",
+          prefer:"resolution=merge-duplicates",
+          headers:{"Prefer":"resolution=merge-duplicates,return=representation"},
+          body:JSON.stringify({chave, valor}),
+        });
+      }
+      showToast("Textos institucionais salvos!");
+    } catch(e){showToast("Erro: "+e.message,"error");}
+    finally{setSaving(false);}
+  }
+
+  return (
+    <Card>
+      <SecaoTitulo icon="🏛">Textos Institucionais</SecaoTitulo>
+      <div style={{display:"flex",flexDirection:"column",gap:20}}>
+        {CAMPOS.map(c=>(
+          <div key={c.key}>
+            <label style={{display:"block",fontSize:12,fontWeight:700,color:C.azulEscuro,marginBottom:6,textTransform:"uppercase",letterSpacing:".05em"}}>{c.label}</label>
+            <textarea value={dados[c.key]||""} onChange={e=>setDados(p=>({...p,[c.key]:e.target.value}))}
+              rows={c.rows} placeholder={`Digite o conteúdo de "${c.label}"...`}
+              style={{width:"100%",border:`1.5px solid #ddd`,borderRadius:6,padding:"10px 12px",
+                fontSize:13,fontFamily:"inherit",resize:"vertical",outline:"none",boxSizing:"border-box"}} />
+          </div>
+        ))}
+        <div><Btn onClick={salvarTudo} disabled={saving} color={C.azulMedio}>{saving?"Salvando...":"💾 Salvar Todos os Textos"}</Btn></div>
+      </div>
+    </Card>
+  );
+}
+
+// ── Editor Causas ────────────────────────────────────────────────────────────
+
+function EditorCausas({ showToast }) {
+  const emptyForm = { titulo:"", descricao:"", imagem_url:"", meta_valor: 0, arrecadado: 0, ativo: true };
+  const [lista, setLista]   = useState([]);
+  const [form, setForm]     = useState(emptyForm);
+  const [editId, setEditId] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const set = k => v => setForm(p=>({...p,[k]:v}));
+
+  async function load() { const r=await supa("/site_causas?select=*&order=id.asc"); setLista(r||[]); }
+  useEffect(()=>{load();},[]);
+
+  async function salvar() {
+    if(!form.titulo||!form.descricao){showToast("Título e descrição obrigatórios.","error");return;}
+    setLoading(true);
+    try {
+      const payload = {...form, meta_valor:Number(form.meta_valor)||0, arrecadado:Number(form.arrecadado)||0};
+      if(editId) { await supa(`/site_causas?id=eq.${editId}`,{method:"PATCH",body:JSON.stringify(payload)}); showToast("Causa atualizada!"); }
+      else        { await supa("/site_causas",{method:"POST",body:JSON.stringify(payload)}); showToast("Causa adicionada!"); }
+      setForm(emptyForm); setEditId(null); load();
+    } catch(e){showToast("Erro.","error");}
+    finally{setLoading(false);}
+  }
+
+  function editar(c) { setForm({titulo:c.titulo,descricao:c.descricao,imagem_url:c.imagem_url||"",meta_valor:c.meta_valor||0,arrecadado:c.arrecadado||0,ativo:c.ativo!==false}); setEditId(c.id); }
+
+  async function excluir(id) {
+    if(!confirm("Excluir causa?")) return;
+    await supa(`/site_causas?id=eq.${id}`,{method:"DELETE",prefer:""}); showToast("Excluído."); load();
+  }
+
+  const pct = c => c.meta_valor > 0 ? Math.min(Math.round((c.arrecadado/c.meta_valor)*100),100) : 0;
+
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1.4fr",gap:24,alignItems:"start"}}>
+      <Card>
+        <SecaoTitulo icon="🤝">{editId?"Editar Causa":"Nova Causa"}</SecaoTitulo>
+        <div style={{display:"flex",flexDirection:"column",gap:13}}>
+          <Input label="Título *" value={form.titulo} onChange={set("titulo")} placeholder="Ex: Educação Infantil" required />
+          <Input label="URL da Imagem" value={form.imagem_url} onChange={set("imagem_url")} placeholder="https://..." />
+          {form.imagem_url && <img src={form.imagem_url} alt="" onError={e=>e.target.style.display="none"} style={{width:"100%",height:100,objectFit:"cover",borderRadius:6}} />}
+          <Textarea label="Descrição *" value={form.descricao} onChange={set("descricao")} placeholder="Descreva a causa..." rows={4} />
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <Input label="Meta (R$)" value={String(form.meta_valor)} onChange={v=>set("meta_valor")(v)} placeholder="0" type="number" />
+            <Input label="Arrecadado (R$)" value={String(form.arrecadado)} onChange={v=>set("arrecadado")(v)} placeholder="0" type="number" />
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <input type="checkbox" id="causat" checked={form.ativo} onChange={e=>set("ativo")(e.target.checked)} style={{width:16,height:16,cursor:"pointer"}} />
+            <label htmlFor="causat" style={{fontSize:13,fontWeight:600,cursor:"pointer"}}>Causa ativa (visível no site)</label>
+          </div>
+          <div style={{display:"flex",gap:10}}>
+            <Btn onClick={salvar} disabled={loading} color={C.azulMedio}>{loading?"Salvando...":editId?"💾 Salvar":"➕ Adicionar"}</Btn>
+            {editId && <Btn outline color={C.cinzaMedio} onClick={()=>{setForm(emptyForm);setEditId(null);}}>Cancelar</Btn>}
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <SecaoTitulo icon="📋">Causas ({lista.length})</SecaoTitulo>
+        {lista.length===0 ? <p style={{color:C.cinzaMedio,fontSize:13}}>Nenhuma causa.</p>
+          : lista.map(c=>(
+            <div key={c.id} style={{padding:"12px 0",borderBottom:`1px solid ${C.cinzaClaro}`}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                <div style={{flex:1}}>
+                  <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:4}}>
+                    <span style={{fontWeight:700,fontSize:13,color:C.azulEscuro}}>{c.titulo}</span>
+                    {!c.ativo && <span style={{background:"#fef0f0",color:C.vermelho,fontSize:10,padding:"1px 6px",borderRadius:4}}>INATIVO</span>}
+                  </div>
+                  <div style={{fontSize:12,color:C.cinzaMedio,marginBottom:6,lineHeight:1.5}}>{c.descricao?.slice(0,80)}...</div>
+                  <div style={{height:6,background:C.cinzaClaro,borderRadius:4,overflow:"hidden"}}>
+                    <div style={{width:`${pct(c)}%`,height:"100%",background:`linear-gradient(to right,${C.azulMedio},${C.dourado})`,borderRadius:4}} />
+                  </div>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:C.cinzaMedio,marginTop:3}}>
+                    <span>Meta: R$ {Number(c.meta_valor||0).toLocaleString("pt-BR")}</span>
+                    <span style={{color:C.verde,fontWeight:700}}>{pct(c)}%</span>
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:6,flexShrink:0}}>
+                  <Btn small outline color={C.azulMedio} onClick={()=>editar(c)}>✏️</Btn>
+                  <Btn small outline color={C.vermelho} onClick={()=>excluir(c.id)}>🗑</Btn>
+                </div>
+              </div>
+            </div>
+          ))}
+      </Card>
+    </div>
+  );
+}
+
+// ── Editor Parceiros ─────────────────────────────────────────────────────────
+
+function EditorParceiros({ showToast }) {
+  const emptyForm = { nome:"", tipo:"empresarial", logo_url:"", site_url:"", descricao:"" };
+  const [lista, setLista]   = useState([]);
+  const [form, setForm]     = useState(emptyForm);
+  const [editId, setEditId] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const set = k => v => setForm(p=>({...p,[k]:v}));
+
+  const TIPOS = [
+    {value:"governamental", label:"🏛 Governamental"},
+    {value:"empresarial",   label:"🏢 Empresarial"},
+    {value:"sociedade",     label:"🤝 Sociedade Civil"},
+  ];
+
+  async function load() { const r=await supa("/site_parceiros?select=*&order=tipo.asc,nome.asc"); setLista(r||[]); }
+  useEffect(()=>{load();},[]);
+
+  async function salvar() {
+    if(!form.nome){showToast("Nome obrigatório.","error");return;}
+    setLoading(true);
+    try {
+      if(editId) { await supa(`/site_parceiros?id=eq.${editId}`,{method:"PATCH",body:JSON.stringify(form)}); showToast("Parceiro atualizado!"); }
+      else        { await supa("/site_parceiros",{method:"POST",body:JSON.stringify(form)}); showToast("Parceiro adicionado!"); }
+      setForm(emptyForm); setEditId(null); load();
+    } catch(e){showToast("Erro.","error");}
+    finally{setLoading(false);}
+  }
+
+  function editar(p) { setForm({nome:p.nome,tipo:p.tipo,logo_url:p.logo_url||"",site_url:p.site_url||"",descricao:p.descricao||""}); setEditId(p.id); }
+
+  async function excluir(id) {
+    if(!confirm("Excluir parceiro?")) return;
+    await supa(`/site_parceiros?id=eq.${id}`,{method:"DELETE",prefer:""}); showToast("Excluído."); load();
+  }
+
+  const tipoLabel = v => TIPOS.find(t=>t.value===v)?.label || v;
+  const corTipo = v => v==="governamental"?C.azulMedio:v==="empresarial"?C.dourado:C.verde;
+
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1.4fr",gap:24,alignItems:"start"}}>
+      <Card>
+        <SecaoTitulo icon="🏢">{editId?"Editar Parceiro":"Novo Parceiro"}</SecaoTitulo>
+        <div style={{display:"flex",flexDirection:"column",gap:13}}>
+          <Input label="Nome *" value={form.nome} onChange={set("nome")} placeholder="Nome da organização" required />
+          <Select label="Tipo" value={form.tipo} onChange={set("tipo")} options={TIPOS} />
+          <Input label="URL do Logo" value={form.logo_url} onChange={set("logo_url")} placeholder="https://..." />
+          {form.logo_url && <img src={form.logo_url} alt="" onError={e=>e.target.style.display="none"} style={{height:50,objectFit:"contain",borderRadius:4}} />}
+          <Input label="Site / Link" value={form.site_url} onChange={set("site_url")} placeholder="https://..." />
+          <Textarea label="Descrição" value={form.descricao} onChange={set("descricao")} placeholder="Descrição da parceria..." rows={3} />
+          <div style={{display:"flex",gap:10}}>
+            <Btn onClick={salvar} disabled={loading} color={C.azulMedio}>{loading?"Salvando...":editId?"💾 Salvar":"➕ Adicionar"}</Btn>
+            {editId && <Btn outline color={C.cinzaMedio} onClick={()=>{setForm(emptyForm);setEditId(null);}}>Cancelar</Btn>}
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <SecaoTitulo icon="📋">Parceiros ({lista.length})</SecaoTitulo>
+        {lista.length===0 ? <p style={{color:C.cinzaMedio,fontSize:13}}>Nenhum parceiro.</p>
+          : lista.map(p=>(
+            <div key={p.id} style={{display:"flex",gap:12,alignItems:"center",padding:"10px 0",borderBottom:`1px solid ${C.cinzaClaro}`}}>
+              <div style={{width:48,height:40,background:C.cinzaClaro,borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,overflow:"hidden"}}>
+                {p.logo_url ? <img src={p.logo_url} alt="" style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain"}} onError={e=>e.target.style.display="none"} /> : "🏢"}
+              </div>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:700,fontSize:13,color:C.azulEscuro}}>{p.nome}</div>
+                <span style={{fontSize:11,color:corTipo(p.tipo),fontWeight:600}}>{tipoLabel(p.tipo)}</span>
+              </div>
+              <div style={{display:"flex",gap:6}}>
+                <Btn small outline color={C.azulMedio} onClick={()=>editar(p)}>✏️</Btn>
+                <Btn small outline color={C.vermelho} onClick={()=>excluir(p.id)}>🗑</Btn>
+              </div>
+            </div>
+          ))}
+      </Card>
+    </div>
+  );
+}
+
+// ── Editor Contato ───────────────────────────────────────────────────────────
+
+function EditorContato({ showToast }) {
+  const CAMPOS = [
+    {key:"endereco",      label:"Endereço Completo"},
+    {key:"bairro_cidade", label:"Bairro, Cidade, CEP"},
+    {key:"telefone",      label:"Telefone / WhatsApp"},
+    {key:"email",         label:"E-mail de Contato"},
+    {key:"horario",       label:"Horário de Atendimento"},
+    {key:"facebook",      label:"URL do Facebook"},
+    {key:"instagram",     label:"URL do Instagram"},
+    {key:"youtube",       label:"URL do Youtube"},
+    {key:"maps_embed",    label:"Código embed do Google Maps (iframe src=...)"},
+  ];
+  const [dados, setDados] = useState({});
+  const [saving, setSaving] = useState(false);
+
+  async function load() {
+    try {
+      const r = await supa("/site_config?select=chave,valor");
+      const obj = {}; (r||[]).forEach(x=>{obj[x.chave]=x.valor;}); setDados(obj);
+    } catch(_){}
+  }
+  useEffect(()=>{load();},[]);
+
+  async function salvar() {
+    setSaving(true);
+    try {
+      for(const [chave, valor] of Object.entries(dados)) {
+        await supa("/site_config",{
+          method:"POST",
+          headers:{"Prefer":"resolution=merge-duplicates,return=representation"},
+          body:JSON.stringify({chave, valor}),
+        });
+      }
+      showToast("Dados de contato salvos!");
+    } catch(e){showToast("Erro: "+e.message,"error");}
+    finally{setSaving(false);}
+  }
+
+  return (
+    <Card>
+      <SecaoTitulo icon="📞">Dados de Contato e Redes Sociais</SecaoTitulo>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+        {CAMPOS.filter(c=>c.key!=="maps_embed").map(c=>(
+          <Input key={c.key} label={c.label}
+            value={dados[c.key]||""} onChange={v=>setDados(p=>({...p,[c.key]:v}))}
+            placeholder={`Digite ${c.label.toLowerCase()}...`} />
+        ))}
+      </div>
+      <div style={{marginTop:16}}>
+        <label style={{display:"block",fontSize:12,fontWeight:700,color:C.azulEscuro,marginBottom:6,textTransform:"uppercase",letterSpacing:".05em"}}>
+          Código embed do Google Maps (apenas o valor do src do iframe)
+        </label>
+        <textarea value={dados["maps_embed"]||""} onChange={e=>setDados(p=>({...p,maps_embed:e.target.value}))}
+          rows={3} placeholder="https://www.google.com/maps/embed?pb=..."
+          style={{width:"100%",border:`1.5px solid #ddd`,borderRadius:6,padding:"10px 12px",
+            fontSize:13,fontFamily:"inherit",resize:"vertical",outline:"none",boxSizing:"border-box"}} />
+      </div>
+      <div style={{marginTop:16}}><Btn onClick={salvar} disabled={saving} color={C.azulMedio}>{saving?"Salvando...":"💾 Salvar Contato"}</Btn></div>
+    </Card>
+  );
+}
+
+// ── Editor Galeria ───────────────────────────────────────────────────────────
+
+function EditorGaleria({ showToast }) {
+  const emptyForm = { titulo:"", url:"", categoria:"", descricao:"" };
+  const [lista, setLista]   = useState([]);
+  const [form, setForm]     = useState(emptyForm);
+  const [editId, setEditId] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const set = k => v => setForm(p=>({...p,[k]:v}));
+
+  async function load() { const r=await supa("/site_galeria?select=*&order=id.desc"); setLista(r||[]); }
+  useEffect(()=>{load();},[]);
+
+  async function salvar() {
+    if(!form.url){showToast("URL da imagem obrigatória.","error");return;}
+    setLoading(true);
+    try {
+      if(editId) { await supa(`/site_galeria?id=eq.${editId}`,{method:"PATCH",body:JSON.stringify(form)}); showToast("Imagem atualizada!"); }
+      else        { await supa("/site_galeria",{method:"POST",body:JSON.stringify(form)}); showToast("Imagem adicionada!"); }
+      setForm(emptyForm); setEditId(null); load();
+    } catch(e){showToast("Erro.","error");}
+    finally{setLoading(false);}
+  }
+
+  function editar(g) { setForm({titulo:g.titulo||"",url:g.url,categoria:g.categoria||"",descricao:g.descricao||""}); setEditId(g.id); }
+
+  async function excluir(id) {
+    if(!confirm("Remover imagem?")) return;
+    await supa(`/site_galeria?id=eq.${id}`,{method:"DELETE",prefer:""}); showToast("Removido."); load();
+  }
+
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"320px 1fr",gap:24,alignItems:"start"}}>
+      <Card>
+        <SecaoTitulo icon="🖼">{editId?"Editar Imagem":"Adicionar Imagem"}</SecaoTitulo>
+        <div style={{display:"flex",flexDirection:"column",gap:13}}>
+          <Input label="URL da Imagem *" value={form.url} onChange={set("url")} placeholder="https://..." required />
+          {form.url && <img src={form.url} alt="preview" onError={e=>e.target.style.display="none"} style={{width:"100%",height:140,objectFit:"cover",borderRadius:6}} />}
+          <Input label="Título" value={form.titulo} onChange={set("titulo")} placeholder="Título da imagem..." />
+          <Input label="Categoria" value={form.categoria} onChange={set("categoria")} placeholder="Ex: Eventos, Projetos..." />
+          <Textarea label="Descrição" value={form.descricao} onChange={set("descricao")} placeholder="Descrição opcional..." rows={3} />
+          <div style={{display:"flex",gap:10}}>
+            <Btn onClick={salvar} disabled={loading} color={C.azulMedio}>{loading?"Salvando...":editId?"💾 Salvar":"🖼 Adicionar"}</Btn>
+            {editId && <Btn outline color={C.cinzaMedio} onClick={()=>{setForm(emptyForm);setEditId(null);}}>Cancelar</Btn>}
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <SecaoTitulo icon="🖼">Galeria ({lista.length} imagens)</SecaoTitulo>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}>
+          {lista.length===0
+            ? <p style={{color:C.cinzaMedio,fontSize:13,gridColumn:"1/-1"}}>Nenhuma imagem na galeria.</p>
+            : lista.map(g=>(
+              <div key={g.id} style={{borderRadius:8,overflow:"hidden",border:`1px solid ${C.cinzaClaro}`,position:"relative"}}>
+                <img src={g.url} alt={g.titulo||""} onError={e=>e.target.style.background=C.cinzaClaro}
+                  style={{width:"100%",height:100,objectFit:"cover",display:"block"}} />
+                <div style={{padding:"8px 10px",background:C.branco}}>
+                  <div style={{fontSize:12,fontWeight:600,color:C.azulEscuro,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.titulo||"Sem título"}</div>
+                  {g.categoria && <div style={{fontSize:11,color:C.cinzaMedio}}>{g.categoria}</div>}
+                  <div style={{display:"flex",gap:6,marginTop:6}}>
+                    <Btn small outline color={C.azulMedio} onClick={()=>editar(g)}>✏️</Btn>
+                    <Btn small outline color={C.vermelho} onClick={()=>excluir(g.id)}>🗑</Btn>
+                  </div>
+                </div>
+              </div>
+            ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
 
 function Configuracoes() {
   const [copied,setCopied] = useState(false);
@@ -1511,7 +2188,7 @@ export default function App() {
 
   if(!user) return <Login onLogin={setUser} />;
 
-  const { podeEditar, podeTesouraria, podeUsuarios, podeProjetos, podeConfigs } = usePerfil(user);
+  const { podeEditar, podeTesouraria, podeUsuarios, podeProjetos, podeConfigs, podeEditarSite } = usePerfil(user);
 
   function Bloqueado({ msg }) {
     return (
@@ -1536,6 +2213,7 @@ export default function App() {
       case "projetos":         return podeProjetos   ? <Projetos />                                        : <Bloqueado msg="Somente o Super Admin pode gerenciar projetos." />;
       case "usuarios":         return podeUsuarios   ? <Usuarios />                                        : <Bloqueado msg="Somente o Super Admin pode gerenciar usuários." />;
       case "configuracoes":    return podeConfigs    ? <Configuracoes />                                   : <Bloqueado msg="Somente o Super Admin pode acessar as configurações." />;
+      case "editor-site":     return podeEditarSite ? <EditorSite />                                      : <Bloqueado msg="Somente o Super Admin pode editar o site." />;
       default:                 return <Dashboard setPage={setPage} />;
     }
   }
