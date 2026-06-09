@@ -1070,7 +1070,7 @@ function Tesouraria({ user }) {
 
   async function loadLanc() {
     try {
-      let q="/financeiro?select=*&order=data.desc&limit=500";
+      let q="/financeiro?select=id,descricao,tipo,valor,data,categoria,projeto,observacoes,usuario_nome,criado_em&order=data.desc,criado_em.desc&limit=500";
       if(filtros.tipo==="saida") { // saídas nunca incluem mensalidades
         if(filtros.projeto)    q+=`&projeto=eq.${encodeURIComponent(filtros.projeto)}`;
         if(filtros.dataInicio) q+=`&data=gte.${filtros.dataInicio}`;
@@ -1136,7 +1136,8 @@ function Tesouraria({ user }) {
       }
       showToast(form.tipo==="entrada"?"Entrada registrada!":"Saída registrada!");
       setForm(emptyLanc);
-      loadLanc();
+      await loadLanc();
+      setAba("lancamentos");
     } catch(e){showToast("Erro: "+e.message,"error");}finally{setLoading(false);}
   }
 
@@ -1895,7 +1896,7 @@ function TransparenciaFinanceira() {
     setLoading(true);
     try {
       const [finRows, mensRows] = await Promise.all([
-        supa("/financeiro?select=*&order=data.asc").catch(()=>[]),
+        supa("/financeiro?select=id,descricao,tipo,valor,data,categoria,projeto,observacoes,usuario_nome&order=data.asc").catch(()=>[]),
         supa("/mensalidades?pago=eq.true&select=id,valor,mes,ano,data_pagamento,associados(nome)").catch(()=>[]),
       ]);
       const mensLanc = (mensRows||[]).map(m => ({
