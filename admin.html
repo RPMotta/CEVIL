@@ -2704,7 +2704,7 @@ function GerenciarMensalidades({ showToast, user }) {
               </div>
               <Input label="Valor (R$)" value={novaForm.valor} onChange={v=>setNovaForm(p=>({...p,valor:v}))} placeholder="0,00" type="number" />
               <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <button className="menu-ham" style={{display:"none"}} onClick={()=>{
+          <button className="menu-ham" onClick={()=>{
             const sb=document.querySelector('.admin-sidebar');
             const ov=document.querySelector('.sidebar-overlay');
             if(sb){sb.classList.toggle('aberto');}
