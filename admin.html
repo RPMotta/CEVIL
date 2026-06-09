@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Administração – Associação CEVIL</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@300;400;700&family=Open+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Open Sans', sans-serif; background: #1a3a5c; }
+    #root { min-height: 100vh; }
+    /* Loading spinner enquanto o React carrega */
+    #loading {
+      position: fixed; inset: 0;
+      background: #1a3a5c;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 20px; z-index: 9999;
+    }
+    #loading .logo {
+      font-family: 'Merriweather', serif;
+      font-size: 28px; font-weight: 700;
+      color: #ffffff;
+    }
+    #loading .slogan {
+      font-size: 11px; color: #c8992a;
+      text-transform: uppercase; letter-spacing: 2px;
+    }
+    #loading .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid rgba(255,255,255,.2);
+      border-top-color: #c8992a;
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+      margin-top: 8px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+  <!-- Tela de loading enquanto o React inicializa -->
+  <div id="loading">
+    <div class="logo">CEVIL</div>
+    <div class="slogan">Área Administrativa</div>
+    <div class="spinner"></div>
+  </div>
+
+  <!-- Ponto de montagem do React -->
+  <div id="root"></div>
+
+  <!-- React + Babel via CDN (para uso sem build) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+
+  <script type="text/babel" src="admin.jsx"></script>
+
+  <script>
+    // Remove o loading assim que o React montar
+    const observer = new MutationObserver(() => {
+      const root = document.getElementById('root');
+      if (root && root.children.length > 0) {
+        const loading = document.getElementById('loading');
+        if (loading) loading.style.display = 'none';
+        observer.disconnect();
+      }
+    });
+    observer.observe(document.getElementById('root'), { childList: true });
+
+    // Fallback: remove loading após 5s de qualquer forma
+    setTimeout(() => {
+      const loading = document.getElementById('loading');
+      if (loading) loading.style.display = 'none';
+    }, 5000);
+  </script>
+
+</body>
+</html>
