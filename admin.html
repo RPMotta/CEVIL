@@ -98,6 +98,7 @@ function usePerfil(user) {
     podeProjetos  : p === "super_admin",                        // criar/editar projetos
     podeConfigs   : p === "super_admin",                        // ver configurações
     podeEditarSite: p === "super_admin",                        // editor completo do site
+    podeAssociados: p === "super_admin" || p === "visualizador", // ver associados
     labelPerfil   : p === "super_admin" ? "Super Admin"
                   : p === "tesouraria"  ? "Tesouraria"
                   : "Visualizador",
@@ -114,6 +115,7 @@ const NAV_ITEMS = [
   { id:"registrar-visita", label:"Registrar Visita",  icon:"✎", section:null,         perfis:["super_admin"] },
   { id:"relatorios",       label:"Relatórios",        icon:"▦", section:null,         perfis:["super_admin","visualizador"] },
   { id:"tesouraria",       label:"Tesouraria",        icon:"💰", section:null,         perfis:["super_admin","tesouraria"] },
+  { id:"associados",       label:"Associados",        icon:"🤝", section:null,         perfis:["super_admin","visualizador"] },
   { id:"minha-conta",      label:"Minha Conta",       icon:"🔑", section:"SISTEMA",    perfis:["super_admin","tesouraria","visualizador"] },
   { id:"projetos",         label:"Projetos",          icon:"📋", section:null,         perfis:["super_admin"] },
   { id:"usuarios",         label:"Usuários",          icon:"🔒", section:null,         perfis:["super_admin"] },
@@ -140,11 +142,11 @@ function Btn({ children, onClick, color, outline, small, full, disabled, style={
   );
 }
 
-function Input({ label, value, onChange, placeholder, type="text", required, readOnly }) {
+function Input({ label, value, onChange, placeholder, type="text", required, readOnly, onBlur }) {
   return (
     <div style={{display:"flex",flexDirection:"column",gap:4}}>
       {label && <label style={{fontSize:12,fontWeight:600,color:C.cinzaEscuro}}>{label}{required&&<span style={{color:C.vermelho}}> *</span>}</label>}
-      <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} readOnly={readOnly}
+      <input type={type} value={value} onChange={e=>onChange(e.target.value)} onBlur={onBlur} placeholder={placeholder} readOnly={readOnly}
         style={{border:`1.5px solid #ddd`,borderRadius:5,padding:"10px 12px",fontSize:13,
           background:readOnly?C.cinzaClaro:C.branco,color:C.cinzaEscuro,outline:"none",
           width:"100%",boxSizing:"border-box",fontFamily:"inherit"}} />
@@ -551,7 +553,7 @@ function NovoCadastro({ onSaved }) {
         <SecaoTitulo icon="📍">Endereço</SecaoTitulo>
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
           <div style={{display:"grid",gridTemplateColumns:"1fr auto 110px",gap:10,alignItems:"end"}}>
-            <Input label="CEP" value={f.cep} onChange={v=>{set("cep")(v);if(v.replace(/\D/g,"").length===8)buscarCep(v);}} placeholder="00000-000" />
+            <Input label="CEP" value={f.cep} onChange={set("cep")} onBlur={e=>{const c=e.target.value.replace(/\D/g,"");if(c.length===8)buscarCep(e.target.value);}} placeholder="00000-000" />
             <Btn onClick={()=>buscarCep(f.cep)} style={{height:40}}>🔍</Btn>
             <Input label="Número" value={f.numero} onChange={set("numero")} placeholder="123" required />
           </div>
@@ -1594,7 +1596,602 @@ ALTER TABLE site_institucional DISABLE ROW LEVEL SECURITY;
 ALTER TABLE site_causas      DISABLE ROW LEVEL SECURITY;
 ALTER TABLE site_parceiros   DISABLE ROW LEVEL SECURITY;
 ALTER TABLE site_config      DISABLE ROW LEVEL SECURITY;
-ALTER TABLE site_galeria     DISABLE ROW LEVEL SECURITY;`;
+ALTER TABLE site_galeria     DISABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS associados (
+  id bigserial primary key,
+  matricula text unique,
+  nome text not null,
+  cpf text,
+  data_nascimento date,
+  telefone text,
+  email text,
+  endereco text,
+  bairro text,
+  cidade text,
+  estado text,
+  cep text,
+  plano text,
+  valor_mensalidade numeric(10,2) default 0,
+  data_filiacao date default now(),
+  status text default 'ativo',
+  observacoes text,
+  criado_em timestamptz default now()
+);
+
+CREATE TABLE IF NOT EXISTS mensalidades (
+  id bigserial primary key,
+  associado_id bigint references associados(id) on delete cascade,
+  mes integer not null,
+  ano integer not null,
+  valor numeric(10,2) not null,
+  pago boolean default false,
+  data_pagamento date,
+  criado_em timestamptz default now(),
+  UNIQUE(associado_id, mes, ano)
+);
+
+ALTER TABLE associados   DISABLE ROW LEVEL SECURITY;
+ALTER TABLE mensalidades DISABLE ROW LEVEL SECURITY;`;
+
+
+// ─── ASSOCIADOS ──────────────────────────────────────────────────────────────
+
+function Associados({ user }) {
+  const [aba, setAba] = useState("lista");
+  const [toast, showToast] = useToast();
+  const { podeEditar } = usePerfil(user);
+  return (
+    <div>
+      <Toast {...(toast||{})} />
+      <PageHeader title="Associados" subtitle="Cadastro e controle de mensalidades" />
+      <div style={{display:"flex",gap:0,marginBottom:24,borderBottom:`2px solid #e8e8e8`}}>
+        {[["lista","👥 Lista de Associados"],["cadastrar","➕ Novo Associado"],["mensalidades","💳 Mensalidades"],["inadimplentes","⚠️ Inadimplentes"]].map(([id,label])=>(
+          (!podeEditar && (id==="cadastrar")) ? null :
+          <button key={id} onClick={()=>setAba(id)}
+            style={{padding:"10px 20px",background:"transparent",border:"none",
+              borderBottom:`3px solid ${aba===id?C.dourado:"transparent"}`,
+              color:aba===id?C.azulEscuro:C.cinzaMedio,
+              fontWeight:aba===id?700:400,fontSize:13,cursor:"pointer",
+              marginBottom:-2,fontFamily:"inherit"}}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {aba==="lista"        && <ListaAssociados setAba={setAba} showToast={showToast} user={user} />}
+      {aba==="cadastrar"    && podeEditar && <CadastrarAssociado setAba={setAba} showToast={showToast} />}
+      {aba==="mensalidades" && <GerenciarMensalidades showToast={showToast} user={user} />}
+      {aba==="inadimplentes"&& <Inadimplentes showToast={showToast} />}
+    </div>
+  );
+}
+
+function ListaAssociados({ setAba, showToast, user }) {
+  const [lista, setLista]   = useState([]);
+  const [busca, setBusca]   = useState("");
+  const [status, setStatus] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [selecionado, setSelecionado] = useState(null);
+  const { podeEditar } = usePerfil(user);
+
+  async function load() {
+    setLoading(true);
+    try {
+      let q = "/associados?select=*&order=nome.asc";
+      if (status) q += `&status=eq.${status}`;
+      const r = await supa(q);
+      let rows = r || [];
+      if (busca) {
+        const b = busca.toLowerCase();
+        rows = rows.filter(a => a.nome?.toLowerCase().includes(b) || a.cpf?.includes(busca) || a.matricula?.includes(busca));
+      }
+      setLista(rows);
+    } catch(e) { showToast("Erro ao carregar.", "error"); }
+    finally { setLoading(false); }
+  }
+
+  useEffect(() => { load(); }, [status]);
+
+  async function excluir(id) {
+    if (!confirm("Excluir este associado e todas as mensalidades?")) return;
+    try {
+      await supa(`/mensalidades?associado_id=eq.${id}`, {method:"DELETE", prefer:""});
+      await supa(`/associados?id=eq.${id}`, {method:"DELETE", prefer:""});
+      showToast("Associado excluído.");
+      setLista(l => l.filter(a => a.id !== id));
+      if (selecionado?.id === id) setSelecionado(null);
+    } catch(e) { showToast("Erro ao excluir.", "error"); }
+  }
+
+  const statusBadge = s => ({
+    ativo:    { bg:"#e6f7ec", cor:C.verde,    label:"Ativo" },
+    inativo:  { bg:"#f5f5f5", cor:C.cinzaMedio, label:"Inativo" },
+    suspenso: { bg:"#fff8e6", cor:C.dourado,  label:"Suspenso" },
+  }[s] || { bg:C.cinzaClaro, cor:C.cinzaMedio, label:s });
+
+  return (
+    <div style={{display:"grid", gridTemplateColumns: selecionado ? "1fr 380px" : "1fr", gap:20}}>
+      <div>
+        <Card style={{marginBottom:16}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 180px auto",gap:12,alignItems:"end"}}>
+            <Input label="Buscar por nome, CPF ou matrícula" value={busca} onChange={setBusca} placeholder="Buscar..." />
+            <Select label="Status" value={status} onChange={setStatus}
+              options={[{value:"",label:"Todos"},{value:"ativo",label:"Ativo"},{value:"inativo",label:"Inativo"},{value:"suspenso",label:"Suspenso"}]} />
+            <Btn onClick={load} disabled={loading} color={C.azulMedio}>🔍 Buscar</Btn>
+          </div>
+        </Card>
+        <Card>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+            <span style={{fontSize:13,color:C.cinzaMedio}}>{lista.length} associado(s)</span>
+            {podeEditar && <Btn small color={C.dourado} onClick={()=>setAba("cadastrar")}>➕ Novo Associado</Btn>}
+          </div>
+          {loading ? <div style={{textAlign:"center",padding:40,color:C.cinzaMedio}}>Carregando...</div>
+          : lista.length === 0 ? <div style={{textAlign:"center",padding:40,color:C.cinzaMedio}}>Nenhum associado encontrado.</div>
+          : <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+              <thead>
+                <tr style={{background:C.azulEscuro}}>
+                  {["Matrícula","Nome","CPF","Telefone","Plano","Status","Ações"].map(h=>(
+                    <th key={h} style={{padding:"9px 12px",textAlign:"left",color:C.branco,fontWeight:700,fontSize:11,letterSpacing:".05em"}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {lista.map((a,i)=>{
+                  const sb = statusBadge(a.status||"ativo");
+                  return (
+                    <tr key={a.id} style={{background: selecionado?.id===a.id?"#f0f6ff": i%2===0?C.branco:C.cinzaClaro, cursor:"pointer"}}
+                      onClick={()=>setSelecionado(selecionado?.id===a.id?null:a)}>
+                      <td style={{padding:"9px 12px",color:C.cinzaMedio,fontFamily:"monospace"}}>{a.matricula||"—"}</td>
+                      <td style={{padding:"9px 12px",fontWeight:600,color:C.azulEscuro}}>{a.nome}</td>
+                      <td style={{padding:"9px 12px",color:C.cinzaMedio}}>{a.cpf||"—"}</td>
+                      <td style={{padding:"9px 12px"}}>{a.telefone||"—"}</td>
+                      <td style={{padding:"9px 12px"}}>{a.plano||"—"}</td>
+                      <td style={{padding:"9px 12px"}}>
+                        <span style={{background:sb.bg,color:sb.cor,padding:"2px 8px",borderRadius:12,fontSize:11,fontWeight:700}}>{sb.label}</span>
+                      </td>
+                      <td style={{padding:"9px 12px"}} onClick={e=>e.stopPropagation()}>
+                        <div style={{display:"flex",gap:6}}>
+                          <Btn small outline color={C.azulMedio} onClick={()=>setSelecionado(selecionado?.id===a.id?null:a)}>Ver</Btn>
+                          {podeEditar && <Btn small outline color={C.vermelho} onClick={()=>excluir(a.id)}>🗑</Btn>}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          }
+        </Card>
+      </div>
+      {selecionado && <FichaAssociado associado={selecionado} onClose={()=>setSelecionado(null)} showToast={showToast} reload={load} user={user} />}
+    </div>
+  );
+}
+
+function FichaAssociado({ associado, onClose, showToast, reload, user }) {
+  const [mens, setMens]   = useState([]);
+  const [editando, setEditando] = useState(false);
+  const [f, setF]         = useState({...associado});
+  const [loading, setLoading] = useState(false);
+  const { podeEditar }    = usePerfil(user);
+  const set = k => v => setF(p=>({...p,[k]:v}));
+
+  async function loadMens() {
+    const r = await supa(`/mensalidades?associado_id=eq.${associado.id}&select=*&order=ano.desc,mes.desc&limit=24`);
+    setMens(r||[]);
+  }
+  useEffect(()=>{ loadMens(); },[associado.id]);
+
+  async function salvarEdicao() {
+    setLoading(true);
+    try {
+      await supa(`/associados?id=eq.${associado.id}`,{method:"PATCH",body:JSON.stringify(f)});
+      showToast("Associado atualizado!"); setEditando(false); reload();
+    } catch(e){showToast("Erro.","error");}
+    finally{setLoading(false);}
+  }
+
+  async function toggleMens(m) {
+    const novoPago = !m.pago;
+    try {
+      await supa(`/mensalidades?id=eq.${m.id}`,{method:"PATCH",body:JSON.stringify({pago:novoPago, data_pagamento: novoPago ? new Date().toISOString().split("T")[0] : null})});
+      loadMens(); showToast(novoPago?"Mensalidade paga!":"Marcado como pendente.");
+    } catch(e){showToast("Erro.","error");}
+  }
+
+  const meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+  const atrasadas = mens.filter(m=>!m.pago).length;
+
+  return (
+    <Card style={{position:"sticky",top:100}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <div>
+          <div style={{fontWeight:700,fontSize:15,color:C.azulEscuro}}>{associado.nome}</div>
+          <div style={{fontSize:11,color:C.cinzaMedio}}>Matrícula: {associado.matricula||"—"}</div>
+        </div>
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          {podeEditar && <Btn small outline color={C.azulMedio} onClick={()=>setEditando(!editando)}>{editando?"Cancelar":"✏️ Editar"}</Btn>}
+          <button onClick={onClose} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",color:C.cinzaMedio}}>✕</button>
+        </div>
+      </div>
+
+      {editando ? (
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <Input label="Nome" value={f.nome} onChange={set("nome")} />
+          <Input label="CPF" value={f.cpf||""} onChange={set("cpf")} />
+          <Input label="Telefone" value={f.telefone||""} onChange={set("telefone")} />
+          <Input label="E-mail" value={f.email||""} onChange={set("email")} />
+          <Input label="Plano" value={f.plano||""} onChange={set("plano")} />
+          <Input label="Valor Mensalidade (R$)" value={String(f.valor_mensalidade||"")} onChange={set("valor_mensalidade")} type="number" />
+          <Select label="Status" value={f.status||"ativo"} onChange={set("status")}
+            options={[{value:"ativo",label:"Ativo"},{value:"inativo",label:"Inativo"},{value:"suspenso",label:"Suspenso"}]} />
+          <Textarea label="Observações" value={f.observacoes||""} onChange={set("observacoes")} rows={2} />
+          <Btn onClick={salvarEdicao} disabled={loading} color={C.verde} full>{loading?"Salvando...":"💾 Salvar"}</Btn>
+        </div>
+      ) : (
+        <div style={{fontSize:13,lineHeight:2.0,color:C.cinzaEscuro}}>
+          {associado.cpf && <div><strong>CPF:</strong> {associado.cpf}</div>}
+          {associado.data_nascimento && <div><strong>Nascimento:</strong> {new Date(associado.data_nascimento+"T12:00:00").toLocaleDateString("pt-BR")}</div>}
+          {associado.telefone && <div><strong>Tel:</strong> {associado.telefone}</div>}
+          {associado.email && <div><strong>Email:</strong> {associado.email}</div>}
+          {associado.endereco && <div><strong>Endereço:</strong> {associado.endereco}</div>}
+          {associado.plano && <div><strong>Plano:</strong> {associado.plano}</div>}
+          {associado.valor_mensalidade && <div><strong>Mensalidade:</strong> R$ {Number(associado.valor_mensalidade).toLocaleString("pt-BR",{minimumFractionDigits:2})}</div>}
+          {associado.data_filiacao && <div><strong>Filiado em:</strong> {new Date(associado.data_filiacao+"T12:00:00").toLocaleDateString("pt-BR")}</div>}
+          {associado.observacoes && <div><strong>Obs:</strong> {associado.observacoes}</div>}
+        </div>
+      )}
+
+      <div style={{borderTop:`1px solid ${C.cinzaClaro}`,marginTop:16,paddingTop:16}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <span style={{fontSize:12,fontWeight:700,color:C.azulEscuro,textTransform:"uppercase",letterSpacing:".05em"}}>Mensalidades</span>
+          {atrasadas>0 && <span style={{background:"#fef0f0",color:C.vermelho,fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:12}}>{atrasadas} em atraso</span>}
+        </div>
+        {mens.length===0 ? <p style={{fontSize:12,color:C.cinzaMedio}}>Sem mensalidades geradas.</p>
+        : mens.map(m=>(
+          <div key={m.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderBottom:`1px solid ${C.cinzaClaro}`}}>
+            <span style={{fontSize:13,color:C.cinzaEscuro}}>{meses[(m.mes||1)-1]}/{m.ano}</span>
+            <span style={{fontSize:12,color:C.cinzaMedio}}>R$ {Number(m.valor||0).toLocaleString("pt-BR",{minimumFractionDigits:2})}</span>
+            {podeEditar ? (
+              <button onClick={()=>toggleMens(m)} style={{
+                background:m.pago?"#e6f7ec":"#fef0f0",
+                color:m.pago?C.verde:C.vermelho,
+                border:`1px solid ${m.pago?C.verde+"40":C.vermelho+"40"}`,
+                padding:"3px 10px",borderRadius:12,fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                {m.pago?"✓ Pago":"✗ Pendente"}
+              </button>
+            ) : (
+              <span style={{background:m.pago?"#e6f7ec":"#fef0f0",color:m.pago?C.verde:C.vermelho,
+                padding:"3px 10px",borderRadius:12,fontSize:11,fontWeight:700}}>
+                {m.pago?"✓ Pago":"✗ Pendente"}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function CadastrarAssociado({ setAba, showToast }) {
+  const empty = {nome:"",cpf:"",data_nascimento:"",telefone:"",email:"",endereco:"",bairro:"",cidade:"SC",estado:"SC",cep:"",plano:"",valor_mensalidade:"",data_filiacao:new Date().toISOString().split("T")[0],status:"ativo",observacoes:""};
+  const [f, setF] = useState(empty);
+  const [loading, setLoading] = useState(false);
+  const set = k => v => setF(p=>({...p,[k]:v}));
+
+  function gerarMatricula() {
+    const ano = new Date().getFullYear().toString().slice(2);
+    const rand = Math.floor(Math.random()*9000+1000);
+    return `${ano}${rand}`;
+  }
+
+  async function salvar() {
+    if (!f.nome){showToast("Nome obrigatório.","error");return;}
+    setLoading(true);
+    try {
+      const matricula = gerarMatricula();
+      const assoc = await supa("/associados",{method:"POST",body:JSON.stringify({...f,matricula,valor_mensalidade:Number(f.valor_mensalidade)||0})});
+      const id = assoc[0].id;
+      // Gerar mensalidades dos próximos 12 meses
+      if (f.valor_mensalidade && Number(f.valor_mensalidade) > 0) {
+        const hoje = new Date();
+        const mensItems = [];
+        for (let i=0; i<12; i++) {
+          const d = new Date(hoje.getFullYear(), hoje.getMonth()+i, 1);
+          mensItems.push({associado_id:id, mes:d.getMonth()+1, ano:d.getFullYear(), valor:Number(f.valor_mensalidade), pago:false});
+        }
+        for (const m of mensItems) {
+          await supa("/mensalidades",{method:"POST",body:JSON.stringify(m)});
+        }
+      }
+      showToast("Associado cadastrado com matrícula "+matricula+"!");
+      setF(empty);
+      setTimeout(()=>setAba("lista"),1200);
+    } catch(e){showToast(e.message.includes("unique")?"CPF já cadastrado.":"Erro: "+e.message,"error");}
+    finally{setLoading(false);}
+  }
+
+  const Row2 = ({children})=><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>{children}</div>;
+  const Row3 = ({children})=><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:14}}>{children}</div>;
+
+  return (
+    <div>
+      <Card style={{marginBottom:20}}>
+        <SecaoTitulo icon="👤">Dados Pessoais</SecaoTitulo>
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
+          <Input label="Nome Completo *" value={f.nome} onChange={set("nome")} placeholder="Nome completo do associado" required />
+          <Row2>
+            <Input label="CPF" value={f.cpf} onChange={set("cpf")} placeholder="000.000.000-00" />
+            <Input label="Data de Nascimento" value={f.data_nascimento} onChange={set("data_nascimento")} type="date" />
+          </Row2>
+          <Row2>
+            <Input label="Telefone / WhatsApp" value={f.telefone} onChange={set("telefone")} placeholder="(48) 99999-9999" />
+            <Input label="E-mail" value={f.email} onChange={set("email")} placeholder="email@exemplo.com" />
+          </Row2>
+        </div>
+      </Card>
+
+      <Card style={{marginBottom:20}}>
+        <SecaoTitulo icon="📍">Endereço</SecaoTitulo>
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
+          <Input label="Endereço (Rua + Número)" value={f.endereco} onChange={set("endereco")} placeholder="Rua das Flores, 123" />
+          <Row3>
+            <Input label="Bairro" value={f.bairro} onChange={set("bairro")} placeholder="Bairro" />
+            <Input label="Cidade" value={f.cidade} onChange={set("cidade")} placeholder="Cidade" />
+            <Input label="CEP" value={f.cep} onChange={set("cep")} placeholder="00000-000" />
+          </Row3>
+        </div>
+      </Card>
+
+      <Card style={{marginBottom:20}}>
+        <SecaoTitulo icon="💳">Filiação e Mensalidade</SecaoTitulo>
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
+          <Row3>
+            <Input label="Plano / Categoria" value={f.plano} onChange={set("plano")} placeholder="Ex: Titular, Dependente..." />
+            <Input label="Valor Mensalidade (R$)" value={f.valor_mensalidade} onChange={set("valor_mensalidade")} placeholder="0,00" type="number" />
+            <Input label="Data de Filiação" value={f.data_filiacao} onChange={set("data_filiacao")} type="date" />
+          </Row3>
+          <Select label="Status" value={f.status} onChange={set("status")}
+            options={[{value:"ativo",label:"✅ Ativo"},{value:"inativo",label:"⏸ Inativo"},{value:"suspenso",label:"⚠️ Suspenso"}]} />
+          <Textarea label="Observações" value={f.observacoes} onChange={set("observacoes")} placeholder="Informações adicionais..." rows={3} />
+        </div>
+      </Card>
+
+      <div style={{display:"flex",gap:12}}>
+        <Btn onClick={salvar} disabled={loading} color={C.dourado}>👤 {loading?"Salvando...":"Cadastrar Associado"}</Btn>
+        <Btn outline color={C.cinzaMedio} onClick={()=>setAba("lista")}>Cancelar</Btn>
+      </div>
+    </div>
+  );
+}
+
+function GerenciarMensalidades({ showToast, user }) {
+  const [associados, setAssociados] = useState([]);
+  const [selId, setSelId]           = useState("");
+  const [mens, setMens]             = useState([]);
+  const [novaForm, setNovaForm]     = useState({mes: new Date().getMonth()+1, ano: new Date().getFullYear(), valor:"", pago:false});
+  const [loading, setLoading]       = useState(false);
+  const { podeEditar }              = usePerfil(user);
+
+  useEffect(()=>{ supa("/associados?select=id,nome,matricula,valor_mensalidade&order=nome.asc&status=eq.ativo").then(r=>setAssociados(r||[])).catch(()=>{}); },[]);
+
+  async function loadMens(id) {
+    const r = await supa(`/mensalidades?associado_id=eq.${id}&select=*&order=ano.desc,mes.desc`);
+    setMens(r||[]);
+  }
+
+  async function toggle(m) {
+    await supa(`/mensalidades?id=eq.${m.id}`,{method:"PATCH",body:JSON.stringify({pago:!m.pago, data_pagamento:!m.pago?new Date().toISOString().split("T")[0]:null})});
+    loadMens(selId); showToast(!m.pago?"Pago!":"Desmarcado.");
+  }
+
+  async function adicionarMens() {
+    if(!selId||!novaForm.valor){showToast("Selecione associado e informe o valor.","error");return;}
+    setLoading(true);
+    try {
+      await supa("/mensalidades",{method:"POST",body:JSON.stringify({associado_id:Number(selId),mes:Number(novaForm.mes),ano:Number(novaForm.ano),valor:Number(novaForm.valor),pago:novaForm.pago})});
+      showToast("Mensalidade adicionada!"); loadMens(selId);
+    } catch(e){showToast("Erro (já pode existir esse mês).","error");}
+    finally{setLoading(false);}
+  }
+
+  async function gerarAno() {
+    const assoc = associados.find(a=>String(a.id)===String(selId));
+    if(!assoc||!assoc.valor_mensalidade){showToast("Associado sem valor de mensalidade definido.","error");return;}
+    if(!confirm(`Gerar 12 mensalidades de R$ ${assoc.valor_mensalidade} para ${assoc.nome}?`)) return;
+    setLoading(true);
+    try {
+      const ano = new Date().getFullYear();
+      for(let m=1;m<=12;m++){
+        try { await supa("/mensalidades",{method:"POST",body:JSON.stringify({associado_id:assoc.id,mes:m,ano,valor:Number(assoc.valor_mensalidade),pago:false})}); } catch(_){}
+      }
+      showToast("12 mensalidades geradas!"); loadMens(selId);
+    } finally{setLoading(false);}
+  }
+
+  const meses=["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+  const totalPago = mens.filter(m=>m.pago).reduce((s,m)=>s+Number(m.valor||0),0);
+  const totalPendente = mens.filter(m=>!m.pago).reduce((s,m)=>s+Number(m.valor||0),0);
+  const fmt = v => v.toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"300px 1fr",gap:20,alignItems:"start"}}>
+      <div style={{display:"flex",flexDirection:"column",gap:16}}>
+        <Card>
+          <SecaoTitulo icon="👤">Selecionar Associado</SecaoTitulo>
+          <Select label="" value={selId} onChange={v=>{setSelId(v);if(v)loadMens(v);}}
+            options={[{value:"",label:"Selecione..."},...associados.map(a=>({value:String(a.id),label:a.nome+(a.matricula?` (${a.matricula})`:"")}))]} />
+        </Card>
+        {selId && podeEditar && (
+          <Card>
+            <SecaoTitulo icon="➕">Adicionar Mensalidade</SecaoTitulo>
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <Select label="Mês" value={String(novaForm.mes)} onChange={v=>setNovaForm(p=>({...p,mes:Number(v)}))}
+                  options={meses.map((m,i)=>({value:String(i+1),label:m}))} />
+                <Input label="Ano" value={String(novaForm.ano)} onChange={v=>setNovaForm(p=>({...p,ano:Number(v)}))} type="number" />
+              </div>
+              <Input label="Valor (R$)" value={novaForm.valor} onChange={v=>setNovaForm(p=>({...p,valor:v}))} placeholder="0,00" type="number" />
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <input type="checkbox" id="jaPago" checked={novaForm.pago} onChange={e=>setNovaForm(p=>({...p,pago:e.target.checked}))} style={{width:15,height:15}} />
+                <label htmlFor="jaPago" style={{fontSize:13,cursor:"pointer"}}>Marcar como já pago</label>
+              </div>
+              <Btn onClick={adicionarMens} disabled={loading} small color={C.azulMedio}>➕ Adicionar</Btn>
+              <Btn onClick={gerarAno} disabled={loading} small outline color={C.verde}>📅 Gerar Ano Completo</Btn>
+            </div>
+          </Card>
+        )}
+        {selId && mens.length>0 && (
+          <Card>
+            <SecaoTitulo icon="📊">Resumo</SecaoTitulo>
+            <div style={{fontSize:13,lineHeight:2}}>
+              <div style={{display:"flex",justifyContent:"space-between"}}><span>Total pago:</span><span style={{color:C.verde,fontWeight:700}}>{fmt(totalPago)}</span></div>
+              <div style={{display:"flex",justifyContent:"space-between"}}><span>Total pendente:</span><span style={{color:C.vermelho,fontWeight:700}}>{fmt(totalPendente)}</span></div>
+              <div style={{display:"flex",justifyContent:"space-between",borderTop:`1px solid ${C.cinzaClaro}`,paddingTop:6}}><span>Total:</span><span style={{fontWeight:700}}>{fmt(totalPago+totalPendente)}</span></div>
+            </div>
+          </Card>
+        )}
+      </div>
+
+      <Card>
+        <SecaoTitulo icon="💳">Histórico de Mensalidades</SecaoTitulo>
+        {!selId ? <div style={{textAlign:"center",padding:"40px 0",color:C.cinzaMedio}}>Selecione um associado ao lado.</div>
+        : mens.length===0 ? <div style={{textAlign:"center",padding:"40px 0",color:C.cinzaMedio}}>Nenhuma mensalidade encontrada.</div>
+        : <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+            <thead>
+              <tr style={{background:C.azulEscuro}}>
+                {["Mês/Ano","Valor","Status","Pagamento",podeEditar?"Ação":""].map(h=>(
+                  <th key={h} style={{padding:"9px 12px",textAlign:"left",color:C.branco,fontWeight:700,fontSize:11}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {mens.map((m,i)=>(
+                <tr key={m.id} style={{background:i%2===0?C.branco:C.cinzaClaro}}>
+                  <td style={{padding:"8px 12px",fontWeight:600}}>{meses[(m.mes||1)-1]}/{m.ano}</td>
+                  <td style={{padding:"8px 12px"}}>R$ {Number(m.valor||0).toLocaleString("pt-BR",{minimumFractionDigits:2})}</td>
+                  <td style={{padding:"8px 12px"}}>
+                    <span style={{background:m.pago?"#e6f7ec":"#fef0f0",color:m.pago?C.verde:C.vermelho,
+                      padding:"2px 10px",borderRadius:12,fontSize:11,fontWeight:700}}>
+                      {m.pago?"✓ Pago":"✗ Pendente"}
+                    </span>
+                  </td>
+                  <td style={{padding:"8px 12px",color:C.cinzaMedio,fontSize:12}}>
+                    {m.data_pagamento?new Date(m.data_pagamento+"T12:00:00").toLocaleDateString("pt-BR"):"—"}
+                  </td>
+                  {podeEditar && (
+                    <td style={{padding:"8px 12px"}}>
+                      <Btn small outline color={m.pago?C.cinzaMedio:C.verde} onClick={()=>toggle(m)}>
+                        {m.pago?"Desmarcar":"✓ Pagar"}
+                      </Btn>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        }
+      </Card>
+    </div>
+  );
+}
+
+function Inadimplentes({ showToast }) {
+  const [lista, setLista] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [mesRef, setMesRef] = useState(new Date().getMonth()+1);
+  const [anoRef, setAnoRef] = useState(new Date().getFullYear());
+  const meses=["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+
+  async function load() {
+    setLoading(true);
+    try {
+      // Buscar todas as mensalidades não pagas até o mês de referência
+      const r = await supa(`/mensalidades?pago=eq.false&select=*,associados(id,nome,matricula,telefone,email,status)&order=ano.asc,mes.asc`);
+      const rows = (r||[]).filter(m => {
+        if(m.associados?.status === "inativo") return false;
+        if(m.ano < anoRef) return true;
+        if(m.ano === anoRef && m.mes <= mesRef) return true;
+        return false;
+      });
+      // Agrupar por associado
+      const porAssoc = {};
+      rows.forEach(m => {
+        const id = m.associados?.id;
+        if(!id) return;
+        if(!porAssoc[id]) porAssoc[id] = { assoc: m.associados, mens: [], total: 0 };
+        porAssoc[id].mens.push(m);
+        porAssoc[id].total += Number(m.valor||0);
+      });
+      setLista(Object.values(porAssoc).sort((a,b)=>b.mens.length-a.mens.length));
+    } catch(e){ showToast("Erro.","error"); }
+    finally{ setLoading(false); }
+  }
+
+  useEffect(()=>{ load(); },[mesRef, anoRef]);
+
+  const fmt = v => v.toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+  const totalGeral = lista.reduce((s,x)=>s+x.total,0);
+
+  return (
+    <div>
+      <Card style={{marginBottom:20}}>
+        <div style={{display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
+          <span style={{fontSize:13,fontWeight:600,color:C.azulEscuro}}>Referência até:</span>
+          <Select label="" value={String(mesRef)} onChange={v=>setMesRef(Number(v))}
+            options={meses.map((m,i)=>({value:String(i+1),label:m}))} />
+          <Input label="" value={String(anoRef)} onChange={v=>setAnoRef(Number(v))} type="number" />
+          <Btn small color={C.azulMedio} onClick={load}>🔍 Atualizar</Btn>
+          <div style={{marginLeft:"auto",display:"flex",gap:24,fontSize:13}}>
+            <div><span style={{color:C.cinzaMedio}}>Inadimplentes: </span><strong style={{color:C.vermelho}}>{lista.length}</strong></div>
+            <div><span style={{color:C.cinzaMedio}}>Total em atraso: </span><strong style={{color:C.vermelho}}>{fmt(totalGeral)}</strong></div>
+          </div>
+        </div>
+      </Card>
+
+      {loading ? <div style={{textAlign:"center",padding:60,color:C.cinzaMedio}}>Carregando...</div>
+      : lista.length===0 ? (
+        <Card>
+          <div style={{textAlign:"center",padding:"60px 0"}}>
+            <div style={{fontSize:48,marginBottom:12}}>🎉</div>
+            <div style={{fontSize:16,fontWeight:700,color:C.verde}}>Nenhum inadimplente!</div>
+            <div style={{fontSize:13,color:C.cinzaMedio,marginTop:8}}>Todos os associados estão em dia até {meses[mesRef-1]}/{anoRef}.</div>
+          </div>
+        </Card>
+      ) : (
+        <Card>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+            <thead>
+              <tr style={{background:C.vermelho}}>
+                {["Matrícula","Associado","Telefone","Meses em Atraso","Total Devido","Parcelas"].map(h=>(
+                  <th key={h} style={{padding:"10px 12px",textAlign:"left",color:C.branco,fontWeight:700,fontSize:11}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {lista.map((x,i)=>(
+                <tr key={x.assoc.id} style={{background:i%2===0?C.branco:"#fff5f5"}}>
+                  <td style={{padding:"9px 12px",fontFamily:"monospace",color:C.cinzaMedio}}>{x.assoc.matricula||"—"}</td>
+                  <td style={{padding:"9px 12px",fontWeight:700,color:C.azulEscuro}}>{x.assoc.nome}</td>
+                  <td style={{padding:"9px 12px"}}>{x.assoc.telefone||"—"}</td>
+                  <td style={{padding:"9px 12px"}}>
+                    <span style={{background:"#fef0f0",color:C.vermelho,padding:"2px 10px",borderRadius:12,fontWeight:700}}>
+                      {x.mens.length} {x.mens.length===1?"mês":"meses"}
+                    </span>
+                  </td>
+                  <td style={{padding:"9px 12px",fontWeight:700,color:C.vermelho}}>{fmt(x.total)}</td>
+                  <td style={{padding:"9px 12px",fontSize:11,color:C.cinzaMedio}}>
+                    {x.mens.map(m=>`${meses[m.mes-1]}/${m.ano}`).join(", ")}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      )}
+    </div>
+  );
+}
 
 
 // ─── EDITOR DO SITE ──────────────────────────────────────────────────────────
@@ -2254,6 +2851,7 @@ function App() {
       case "projetos":         return podeProjetos   ? <Projetos />                                        : <Bloqueado msg="Somente o Super Admin pode gerenciar projetos." />;
       case "usuarios":         return podeUsuarios   ? <Usuarios />                                        : <Bloqueado msg="Somente o Super Admin pode gerenciar usuários." />;
       case "configuracoes":    return podeConfigs    ? <Configuracoes />                                   : <Bloqueado msg="Somente o Super Admin pode acessar as configurações." />;
+      case "associados":       return podeAssociados  ? <Associados user={user} />                         : <Bloqueado msg="Acesso negado." />;
       case "editor-site":     return podeEditarSite ? <EditorSite />                                      : <Bloqueado msg="Somente o Super Admin pode editar o site." />;
       default:                 return <Dashboard setPage={setPage} />;
     }
