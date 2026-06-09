@@ -1120,11 +1120,20 @@ function Tesouraria({ user }) {
     if(isNaN(valorNum)||valorNum<=0){showToast("Valor inválido.","error");return;}
     setLoading(true);
     try {
-      await supa("/financeiro",{method:"POST",body:JSON.stringify({
+      const nomeUsuario = user?.nome_completo||user?.usuario||"Sistema";
+      const inserted = await supa("/financeiro",{method:"POST",body:JSON.stringify({
         descricao:form.descricao,tipo:form.tipo,valor:valorNum,data:form.data,
         categoria:form.categoria,projeto:form.projeto||null,observacoes:form.observacoes||null,
-        usuario_nome: user?.nome_completo||user?.usuario||"Sistema",
       })});
+      // Atualizar usuario_nome em seguida (contorna cache do PostgREST)
+      if(inserted&&inserted[0]&&inserted[0].id){
+        try {
+          await supa(`/financeiro?id=eq.${inserted[0].id}`,{
+            method:"PATCH",
+            body:JSON.stringify({usuario_nome:nomeUsuario})
+          });
+        } catch(_){}
+      }
       showToast(form.tipo==="entrada"?"Entrada registrada!":"Saída registrada!");
       setForm(emptyLanc);
       loadLanc();
