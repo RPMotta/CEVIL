@@ -220,10 +220,13 @@ function Login({ onLogin }) {
     setLoading(true);setErro("");
     try {
       const hash = hashSimple(senha);
-      const rows = await supa(`/sistema_usuarios?usuario=eq.${encodeURIComponent(usuario)}&senha_hash=eq.${hash}&ativo=eq.true&select=*`);
-      if (!rows?.length){setErro("Usuário ou senha inválidos.");return;}
-      onLogin(rows[0]);
-    } catch(e){setErro("Erro ao conectar com o servidor.");}
+      const rows = await supa(`/sistema_usuarios?usuario=eq.${encodeURIComponent(usuario)}&select=*`);
+      if (!rows?.length){setErro("Usuário não encontrado.");return;}
+      const u = rows[0];
+      if (u.senha_hash !== hash){setErro("Senha incorreta.");return;}
+      if (!u.ativo){setErro("Usuário desativado.");return;}
+      onLogin(u);
+    } catch(e){setErro("Erro: " + e.message);}
     finally{setLoading(false);}
   }
 
