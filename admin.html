@@ -1184,7 +1184,7 @@ function Tesouraria({ user }) {
 
       {/* Abas */}
       <div style={{display:"flex",gap:0,marginBottom:20,borderBottom:`2px solid #e8e8e8`}}>
-        {[["lancamentos","Lançamentos"],["novo","Novo Lançamento"],["relatorio","Relatório"]].map(([id,label])=>(
+        {[["lancamentos","Lançamentos"],["novo","Novo Lançamento"],["relatorio","Relatório"],["categorias","⚙️ Categorias"]].map(([id,label])=>(
           <button key={id} onClick={()=>setAba(id)}
             style={{padding:"10px 22px",background:"transparent",border:"none",
               borderBottom:`2px solid ${aba===id?C.dourado:"transparent"}`,
