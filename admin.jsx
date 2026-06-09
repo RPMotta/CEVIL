@@ -1,5 +1,4 @@
-import { useState, useEffect } from "react";
-
+const { useState, useEffect } = React;
 const SUPA_URL = "https://hnpahosgldgecwgobizb.supabase.co";
 const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhucGFob3NnbGRnZWN3Z29iaXpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5OTg3MzksImV4cCI6MjA5NjU3NDczOX0.Ux4xGVVshJpOZ0vn10YZ6seeia_m4TjwTboiKTXVkdM";
 
@@ -2181,7 +2180,7 @@ function Configuracoes() {
 
 // ─── APP ROOT ────────────────────────────────────────────────────────────────
 
-export default function App() {
+function App() {
   const [user,setUser]       = useState(null);
   const [page,setPage]       = useState("dashboard");
   const [pessoaId,setPessoaId] = useState(null);
@@ -2224,3 +2223,7 @@ export default function App() {
     </Layout>
   );
 }
+
+// Montar o app
+const _root = ReactDOM.createRoot(document.getElementById('root'));
+_root.render(React.createElement(App));
