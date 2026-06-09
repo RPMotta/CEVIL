@@ -1,0 +1,3261 @@
+<!DOCTYPE html>
+<!-- CEVIL Admin v20260609-FINAL -->
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Administração – Associação CEVIL</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@300;400;700&family=Open+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Open Sans', sans-serif; background: #1a3a5c; }
+    #root { min-height: 100vh; }
+    #loading {
+      position: fixed; inset: 0; background: #1a3a5c;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 16px; z-index: 9999;
+    }
+    #loading .titulo { font-family: 'Merriweather', serif; font-size: 26px; font-weight: 700; color: #fff; }
+    #loading .subtitulo { font-size: 11px; color: #c8992a; text-transform: uppercase; letter-spacing: 2px; }
+    #loading .spinner { width: 36px; height: 36px; margin-top: 10px; border: 3px solid rgba(255,255,255,.15); border-top-color: #c8992a; border-radius: 50%; animation: spin .75s linear infinite; }
+    #loading .msg { font-size: 12px; color: rgba(255,255,255,.45); margin-top: 4px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div id="loading">
+    <div style="font-size:40px">🌿</div>
+    <div class="titulo">CEVIL</div>
+    <div class="subtitulo">Área Administrativa</div>
+    <div class="spinner"></div>
+    <div class="msg">Carregando sistema...</div>
+  </div>
+  <div id="root"></div>
+
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
+
+  <script type="text/babel">
+const { useState, useEffect } = React;
+const SUPA_URL = "https://hnpahosgldgecwgobizb.supabase.co";
+const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhucGFob3NnbGRnZWN3Z29iaXpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5OTg3MzksImV4cCI6MjA5NjU3NDczOX0.Ux4xGVVshJpOZ0vn10YZ6seeia_m4TjwTboiKTXVkdM";
+
+async function supa(path, opts = {}) {
+  const res = await fetch(`${SUPA_URL}/rest/v1${path}`, {
+    headers: {
+      apikey: SUPA_KEY,
+      Authorization: `Bearer ${SUPA_KEY}`,
+      "Content-Type": "application/json",
+      Prefer: opts.prefer ?? "return=representation",
+      ...opts.headers,
+    },
+    ...opts,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || res.statusText);
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+function hashSimple(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
+  return Math.abs(h).toString(16).padStart(8, "0");
+}
+
+// ─── Paleta idêntica ao site público ───────────────────────────────────────
+const C = {
+  azulEscuro: "#1a3a5c",
+  azulMedio:  "#1e5fa8",
+  azulClaro:  "#3182ce",
+  dourado:    "#c8992a",
+  douradoClaro:"#e8b84b",
+  cinzaEscuro:"#333333",
+  cinzaMedio: "#666666",
+  cinzaClaro: "#f5f5f5",
+  branco:     "#ffffff",
+  verde:      "#2d8a4e",
+  vermelho:   "#c0392b",
+};
+
+// ─── Perfis de acesso ──────────────────────────────────────────────────────
+// super_admin : acesso total — todas as telas, pode editar/excluir tudo
+// tesouraria  : acessa Tesouraria + visualização/pesquisa (sem editar cadastros)
+// visualizador: visualiza e pesquisa tudo, EXCETO Tesouraria; não pode editar/excluir
+
+function usePerfil(user) {
+  const p = user?.perfil || "";
+  return {
+    isSuperAdmin : p === "super_admin",
+    isTesouraria : p === "tesouraria",
+    isVisualizador: p === "visualizador",
+    // helpers de permissão
+    podeEditar    : p === "super_admin",                        // criar/editar/excluir cadastros
+    podeTesouraria: p === "super_admin" || p === "tesouraria",  // ver módulo financeiro
+    podeUsuarios  : p === "super_admin",                        // gerenciar usuários
+    podeProjetos  : p === "super_admin",                        // criar/editar projetos
+    podeConfigs   : p === "super_admin",                        // ver configurações
+    podeEditarSite: p === "super_admin",                        // editor completo do site
+    podeAssociados: p === "super_admin" || p === "visualizador", // ver associados
+    labelPerfil   : p === "super_admin" ? "Super Admin"
+                  : p === "tesouraria"  ? "Tesouraria"
+                  : "Visualizador",
+    corPerfil     : p === "super_admin" ? "#7c4dbb"
+                  : p === "tesouraria"  ? "#c8992a"
+                  : "#1e5fa8",
+  };
+}
+
+const NAV_ITEMS = [
+  { id:"dashboard",        label:"Dashboard",        icon:"⊞", section:"PRINCIPAL",  perfis:["super_admin","tesouraria","visualizador"] },
+  { id:"novo-cadastro",    label:"Novo Cadastro",     icon:"＋", section:null,         perfis:["super_admin"] },
+  { id:"pessoas",          label:"Pessoas",           icon:"●", section:null,         perfis:["super_admin","visualizador"] },
+  { id:"registrar-visita", label:"Registrar Visita",  icon:"✎", section:null,         perfis:["super_admin"] },
+  { id:"relatorios",       label:"Relatórios",        icon:"▦", section:null,         perfis:["super_admin","visualizador"] },
+  { id:"tesouraria",       label:"Tesouraria",        icon:"💰", section:null,         perfis:["super_admin","tesouraria"] },
+  { id:"associados",       label:"Associados",        icon:"🤝", section:null,         perfis:["super_admin","visualizador"] },
+  { id:"transparencia-fin", label:"Transparência",     icon:"📢", section:null,         perfis:["super_admin","tesouraria","visualizador"] },
+  { id:"minha-conta",      label:"Minha Conta",       icon:"🔑", section:"SISTEMA",    perfis:["super_admin","tesouraria","visualizador"] },
+  { id:"projetos",         label:"Projetos",          icon:"📋", section:null,         perfis:["super_admin"] },
+  { id:"usuarios",         label:"Usuários",          icon:"🔒", section:null,         perfis:["super_admin"] },
+  { id:"editor-site",      label:"Editor do Site",    icon:"🌐", section:null,         perfis:["super_admin"] },
+  { id:"configuracoes",    label:"Configurações",     icon:"⚙", section:null,         perfis:["super_admin"] },
+];
+
+// ─── Componentes base ───────────────────────────────────────────────────────
+
+function Btn({ children, onClick, color, outline, small, full, disabled, style={} }) {
+  const bg  = color ?? C.dourado;
+  const bgF = outline ? "transparent" : bg;
+  const txt = outline ? bg : C.branco;
+  return (
+    <button onClick={onClick} disabled={disabled} style={{
+      background:bgF, color:txt, border:`2px solid ${bg}`,
+      borderRadius:5, padding: small?"5px 14px":"10px 24px",
+      fontSize: small?12:13, fontWeight:700, cursor:disabled?"not-allowed":"pointer",
+      opacity:disabled?.6:1, width:full?"100%":undefined,
+      textTransform:"uppercase", letterSpacing:".5px",
+      display:"inline-flex", alignItems:"center", gap:6,
+      transition:"all .25s", ...style,
+    }}>{children}</button>
+  );
+}
+
+function Input({ label, value, onChange, placeholder, type="text", required, readOnly, onBlur }) {
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:4}}>
+      {label && <label style={{fontSize:12,fontWeight:600,color:C.cinzaEscuro}}>{label}{required&&<span style={{color:C.vermelho}}> *</span>}</label>}
+      <input type={type} value={value??""} onChange={e=>onChange(e.target.value)} onBlur={onBlur}
+        placeholder={placeholder} readOnly={readOnly}
+        style={{border:"1.5px solid #ddd",borderRadius:5,padding:"10px 12px",fontSize:13,
+          background:readOnly?C.cinzaClaro:C.branco,color:C.cinzaEscuro,outline:"none",
+          width:"100%",boxSizing:"border-box",fontFamily:"inherit"}} />
+    </div>
+  );
+}
+
+function Select({ label, value, onChange, options, required }) {
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:4}}>
+      {label && <label style={{fontSize:12,fontWeight:600,color:C.cinzaEscuro}}>{label}{required&&<span style={{color:C.vermelho}}> *</span>}</label>}
+      <select value={value??""} onChange={e=>onChange(e.target.value)}
+        style={{border:"1.5px solid #ddd",borderRadius:5,padding:"10px 12px",fontSize:13,
+          background:C.branco,color:C.cinzaEscuro,outline:"none",width:"100%",cursor:"pointer",fontFamily:"inherit"}}>
+        {options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </div>
+  );
+}
+
+function Textarea({ label, value, onChange, placeholder, rows=4 }) {
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:4}}>
+      {label&&<label style={{fontSize:12,fontWeight:600,color:C.cinzaEscuro}}>{label}</label>}
+      <textarea value={value??""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} rows={rows}
+        style={{border:"1.5px solid #ddd",borderRadius:5,padding:"10px 12px",fontSize:13,
+          background:C.branco,color:C.cinzaEscuro,outline:"none",resize:"vertical",
+          fontFamily:"inherit",width:"100%",boxSizing:"border-box"}} />
+    </div>
+  );
+}
+
+function Card({ children, style={} }) {
+  return <div style={{background:C.branco,border:`1px solid #e8e8e8`,borderRadius:10,padding:"24px 28px",...style}}>{children}</div>;
+}
+
+// Grids reutilizáveis — definidos fora de qualquer componente para evitar re-mount
+function Grid2({ children, gap=14 }) {
+  return <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap}}>{children}</div>;
+}
+function Grid3({ children, gap=14 }) {
+  return <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap}}>{children}</div>;
+}
+function Grid4({ children, gap=14 }) {
+  return <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap}}>{children}</div>;
+}
+
+function SecaoTitulo({ icon, children }) {
+  return (
+    <div style={{marginBottom:20}}>
+      <p style={{fontSize:11,textTransform:"uppercase",letterSpacing:"2px",color:C.dourado,fontWeight:700,marginBottom:6}}>{icon} {children}</p>
+      <div style={{width:40,height:3,background:C.dourado,borderRadius:2}} />
+    </div>
+  );
+}
+
+function Toast({ msg, type }) {
+  if (!msg) return null;
+  return (
+    <div style={{position:"fixed",top:20,right:20,background:type==="error"?C.vermelho:C.verde,
+      color:C.branco,padding:"12px 22px",borderRadius:7,fontSize:13,fontWeight:700,
+      zIndex:9999,boxShadow:"0 4px 16px rgba(0,0,0,.25)"}}>
+      {msg}
+    </div>
+  );
+}
+
+function useToast() {
+  const [t,setT] = useState(null);
+  const show = (msg, type="ok") => { setT({msg,type}); setTimeout(()=>setT(null),3000); };
+  return [t, show];
+}
+
+// ─── LOGIN ──────────────────────────────────────────────────────────────────
+
+function Login({ onLogin }) {
+  const [usuario,setUsuario] = useState("");
+  const [senha,setSenha]     = useState("");
+  const [loading,setLoading] = useState(false);
+  const [erro,setErro]       = useState("");
+
+  async function handleLogin() {
+    if (!usuario||!senha){setErro("Preencha usuário e senha.");return;}
+    setLoading(true);setErro("");
+    try {
+      const hash = hashSimple(senha);
+      const rows = await supa(`/sistema_usuarios?usuario=eq.${encodeURIComponent(usuario)}&select=*`);
+      if (!rows?.length){setErro("Usuário não encontrado.");return;}
+      const u = rows[0];
+      if (u.senha_hash !== hash){setErro("Senha incorreta.");return;}
+      if (!u.ativo){setErro("Usuário desativado.");return;}
+      onLogin(u);
+    } catch(e){setErro("Erro: " + e.message);}
+    finally{setLoading(false);}
+  }
+
+  return (
+    <div style={{minHeight:"100vh",background:`linear-gradient(135deg,${C.azulEscuro},${C.azulMedio})`,
+      display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Open Sans',sans-serif"}}>
+
+      {/* Barra top decorativa */}
+      <div style={{position:"fixed",top:0,left:0,right:0,background:"rgba(0,0,0,.25)",
+        padding:"10px 24px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div>
+          <span style={{fontFamily:"'Merriweather',serif",color:C.branco,fontWeight:700,fontSize:16}}>Associação CEVIL</span>
+          <span style={{fontSize:10,color:C.douradoClaro,textTransform:"uppercase",letterSpacing:"1px",marginLeft:10}}>Casa de Esperança Viveiro de Luz</span>
+        </div>
+        <a href="index.html" style={{color:"rgba(255,255,255,.7)",fontSize:12}}>← Voltar ao site</a>
+      </div>
+
+      <div style={{background:C.branco,borderRadius:12,padding:"44px 48px",width:400,
+        boxShadow:"0 12px 50px rgba(0,0,0,.35)"}}>
+        <div style={{textAlign:"center",marginBottom:32}}>
+          <div style={{width:60,height:60,borderRadius:"50%",background:C.azulEscuro,
+            display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:26,marginBottom:14}}>🌿</div>
+          <div style={{fontFamily:"'Merriweather',serif",fontWeight:700,fontSize:20,color:C.azulEscuro}}>Área Administrativa</div>
+          <div style={{fontSize:11,color:C.dourado,textTransform:"uppercase",letterSpacing:"1px",marginTop:4}}>Associação CEVIL</div>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
+          <Input label="Usuário" value={usuario} onChange={setUsuario} placeholder="seu.usuario" />
+          <Input label="Senha" value={senha} onChange={setSenha} placeholder="••••••" type="password" />
+          {erro && <div style={{color:C.vermelho,fontSize:12,background:"#fef0f0",border:"1px solid #f5c6c6",borderRadius:6,padding:"8px 12px"}}>{erro}</div>}
+          <button onClick={handleLogin} disabled={loading}
+            style={{background:C.dourado,color:C.branco,border:"none",borderRadius:5,padding:"13px",
+              fontSize:13,fontWeight:700,cursor:loading?"not-allowed":"pointer",
+              textTransform:"uppercase",letterSpacing:".5px",marginTop:4,
+              opacity:loading?.7:1}}>
+            {loading?"Entrando...":"Entrar"}
+          </button>
+        </div>
+        <div style={{textAlign:"center",marginTop:20}}>
+          <a href="index.html" style={{fontSize:12,color:C.azulMedio}}>← Voltar ao site público</a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── LAYOUT ─────────────────────────────────────────────────────────────────
+
+function Layout({ user, page, setPage, onLogout, children }) {
+  const { labelPerfil, corPerfil } = usePerfil(user);
+
+  return (
+    <div style={{display:"flex",minHeight:"100vh",background:C.cinzaClaro,fontFamily:"'Open Sans',sans-serif"}}>
+
+      {/* Sidebar */}
+      <aside style={{width:200,background:C.azulEscuro,display:"flex",flexDirection:"column",flexShrink:0,
+        boxShadow:"4px 0 20px rgba(0,0,0,.18)"}}>
+
+        {/* Logo */}
+        <div style={{padding:"18px 16px 14px",borderBottom:"1px solid rgba(255,255,255,.1)"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <div style={{width:38,height:38,borderRadius:"50%",background:"rgba(255,255,255,.1)",
+              border:"1px solid rgba(255,255,255,.2)",display:"flex",alignItems:"center",
+              justifyContent:"center",fontSize:18}}>🌿</div>
+            <div>
+              <div style={{fontFamily:"'Merriweather',serif",fontWeight:700,fontSize:14,color:C.branco}}>CEVIL</div>
+              <div style={{fontSize:9,color:C.douradoClaro,textTransform:"uppercase",letterSpacing:"1px"}}>Administração</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Nav */}
+        <nav style={{flex:1,padding:"8px 0",overflowY:"auto"}}>
+          {NAV_ITEMS.filter(n => n.perfis.includes(user.perfil)).map((item,i,arr) => {
+            const prev = arr[i-1];
+            return (
+              <div key={item.id}>
+                {item.section && item.section !== prev?.section && (
+                  <div style={{padding:"14px 16px 4px",fontSize:9,fontWeight:700,
+                    color:"rgba(255,255,255,.35)",letterSpacing:".1em"}}>{item.section}</div>
+                )}
+                <button onClick={()=>setPage(item.id)}
+                  style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"9px 16px",
+                    background: page===item.id?"rgba(255,255,255,.12)":"transparent",
+                    border:"none",borderLeft:`3px solid ${page===item.id?C.dourado:"transparent"}`,
+                    color: page===item.id?C.branco:"rgba(255,255,255,.65)",
+                    fontSize:13,fontWeight:page===item.id?700:400,cursor:"pointer",textAlign:"left",
+                    transition:"all .2s"}}>
+                  <span style={{fontSize:14,minWidth:18}}>{item.icon}</span>
+                  {item.label}
+                </button>
+              </div>
+            );
+          })}
+        </nav>
+
+        {/* User info */}
+        <div style={{padding:"12px 16px",borderTop:"1px solid rgba(255,255,255,.1)"}}>
+          <div style={{fontSize:9,color:"rgba(255,255,255,.4)",marginBottom:2,textTransform:"uppercase",letterSpacing:".5px"}}>Logado como</div>
+          <div style={{fontSize:12,color:"rgba(255,255,255,.8)",fontWeight:600,lineHeight:1.4}}>{user.nome_completo}</div>
+        </div>
+      </aside>
+
+      {/* Main */}
+      <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+
+        {/* Topbar — idêntica ao site público */}
+        <header style={{background:C.azulEscuro,display:"flex",alignItems:"center",
+          justifyContent:"space-between",padding:"0 24px",height:50,flexShrink:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:16,fontSize:12,color:"rgba(255,255,255,.65)"}}>
+            <span>🕐 Segunda a Sexta – 08h às 17h</span>
+            <span>📍 Rua Graciosa 227 – Palhoça, SC</span>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <span style={{background:corPerfil,color:C.branco,fontSize:11,fontWeight:700,
+              padding:"3px 12px",borderRadius:20,textTransform:"uppercase"}}>
+              {labelPerfil}
+            </span>
+            <a href="index.html" style={{color:"rgba(255,255,255,.65)",fontSize:12,padding:"4px 10px"}}>← Site</a>
+            <button onClick={onLogout}
+              style={{background:"transparent",border:"1px solid rgba(255,255,255,.35)",
+                color:C.branco,padding:"4px 14px",borderRadius:20,fontSize:12,cursor:"pointer"}}>
+              Sair
+            </button>
+          </div>
+        </header>
+
+        <main style={{flex:1,padding:28,overflowY:"auto"}}>{children}</main>
+      </div>
+    </div>
+  );
+}
+
+function PageHeader({ title, subtitle }) {
+  return (
+    <div style={{marginBottom:28}}>
+      <h1 style={{fontSize:26,fontWeight:700,color:C.azulEscuro,fontFamily:"'Merriweather',serif",margin:0}}>{title}</h1>
+      {subtitle && <p style={{fontSize:13,color:C.cinzaMedio,margin:"5px 0 0"}}>{subtitle}</p>}
+    </div>
+  );
+}
+
+// ─── DASHBOARD ──────────────────────────────────────────────────────────────
+
+function Dashboard({ setPage }) {
+  const [stats,setStats]       = useState({pessoas:0,visitas:0,visitasMes:0,projetos:0});
+  const [porProjeto,setPP]     = useState([]);
+  const [ultimas,setUltimas]   = useState([]);
+  const [porMes,setPorMes]     = useState([]);
+
+  useEffect(()=>{
+    async function load(){
+      try {
+        const [pRows,vRows,prRows] = await Promise.all([
+          supa("/pessoas?select=id"),
+          supa("/visitas?select=id,data_visita,projeto,observacoes,pessoas(nome_completo)"),
+          supa("/projetos?status=eq.ativo&select=id,nome"),
+        ]);
+        const now = new Date();
+        const mesK = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+        setStats({pessoas:(pRows||[]).length,visitas:(vRows||[]).length,
+          visitasMes:(vRows||[]).filter(v=>v.data_visita?.startsWith(mesK)).length,
+          projetos:(prRows||[]).length});
+        const pp={};
+        (vRows||[]).forEach(v=>{pp[v.projeto]=(pp[v.projeto]||0)+1;});
+        setPP(Object.entries(pp).map(([n,c])=>({nome:n,count:c})).sort((a,b)=>b.count-a.count).slice(0,5));
+        setUltimas([...(vRows||[])].sort((a,b)=>new Date(b.data_visita)-new Date(a.data_visita)).slice(0,6));
+        const meses=[];
+        for(let i=5;i>=0;i--){
+          const d=new Date(now.getFullYear(),now.getMonth()-i,1);
+          const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+          const label=d.toLocaleDateString("pt-BR",{month:"short",year:"2-digit"}).replace(". ","/");
+          meses.push({key,label,count:(vRows||[]).filter(v=>v.data_visita?.startsWith(key)).length});
+        }
+        setPorMes(meses);
+      } catch(_){}
+    }
+    load();
+  },[]);
+
+  const maxMes = Math.max(...porMes.map(m=>m.count),1);
+  const cards = [
+    {label:"PESSOAS",         value:stats.pessoas,    color:C.azulMedio},
+    {label:"TOTAL VISITAS",   value:stats.visitas,    color:"#e07020"},
+    {label:"VISITAS MÊS",     value:stats.visitasMes, color:C.azulClaro},
+    {label:"PROJETOS ATIVOS", value:stats.projetos,   color:"#7c4dbb"},
+  ];
+
+  return (
+    <div>
+      <PageHeader title="Dashboard" subtitle="Visão geral da associação" />
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:16,marginBottom:24}}>
+        {cards.map(s=>(
+          <div key={s.label} style={{background:C.branco,borderLeft:`4px solid ${s.color}`,
+            borderRadius:10,padding:"20px 20px 16px",boxShadow:"0 2px 8px rgba(0,0,0,.07)"}}>
+            <div style={{fontSize:34,fontWeight:700,color:C.azulEscuro,fontFamily:"'Merriweather',serif"}}>{s.value}</div>
+            <div style={{fontSize:10,fontWeight:700,color:C.cinzaMedio,letterSpacing:".07em",marginTop:4,textTransform:"uppercase"}}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:24}}>
+        <Card>
+          <SecaoTitulo icon="📊">Visitas por Projeto</SecaoTitulo>
+          {porProjeto.length===0
+            ? <p style={{color:C.cinzaMedio,fontSize:13}}>Sem dados.</p>
+            : porProjeto.map(p=>(
+              <div key={p.nome} style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                <div style={{flex:1,fontSize:13,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.nome}</div>
+                <div style={{width:110,height:7,background:C.cinzaClaro,borderRadius:4,overflow:"hidden"}}>
+                  <div style={{width:`${Math.round((p.count/(stats.visitas||1))*100)}%`,height:"100%",background:C.azulMedio,borderRadius:4}} />
+                </div>
+                <div style={{fontSize:13,fontWeight:700,color:C.azulMedio,minWidth:18}}>{p.count}</div>
+              </div>
+            ))}
+        </Card>
+        <Card>
+          <SecaoTitulo icon="📈">Visitas — Últimos 6 Meses</SecaoTitulo>
+          {porMes.map(m=>(
+            <div key={m.key} style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+              <div style={{fontSize:12,color:C.cinzaMedio,minWidth:48}}>{m.label}</div>
+              <div style={{flex:1,height:7,background:C.cinzaClaro,borderRadius:4,overflow:"hidden"}}>
+                <div style={{width:`${Math.round((m.count/maxMes)*100)}%`,height:"100%",background:C.azulMedio,borderRadius:4}} />
+              </div>
+              <div style={{fontSize:13,fontWeight:700,color:C.dourado,minWidth:16}}>{m.count}</div>
+            </div>
+          ))}
+        </Card>
+      </div>
+
+      <Card>
+        <SecaoTitulo icon="⏱">Últimas Visitas</SecaoTitulo>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+          <thead>
+            <tr style={{background:C.azulEscuro}}>
+              {["PESSOA","PROJETO","DATA","OBSERVAÇÃO"].map(h=>(
+                <th key={h} style={{padding:"10px 14px",textAlign:"left",color:C.branco,fontWeight:700,fontSize:11,letterSpacing:".06em"}}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {ultimas.length===0
+              ? <tr><td colSpan={4} style={{padding:"16px 14px",color:C.cinzaMedio,textAlign:"center"}}>Nenhuma visita registrada.</td></tr>
+              : ultimas.map((v,i)=>(
+                <tr key={v.id} style={{background:i%2===0?C.branco:C.cinzaClaro}}>
+                  <td style={{padding:"9px 14px"}}>{v.pessoas?.nome_completo||"—"}</td>
+                  <td style={{padding:"9px 14px"}}>{v.projeto}</td>
+                  <td style={{padding:"9px 14px",whiteSpace:"nowrap"}}>{v.data_visita?new Date(v.data_visita+"T12:00:00").toLocaleDateString("pt-BR"):"—"}</td>
+                  <td style={{padding:"9px 14px",color:C.cinzaMedio}}>{v.observacoes||"—"}</td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </Card>
+    </div>
+  );
+}
+
+// ─── NOVO CADASTRO ───────────────────────────────────────────────────────────
+
+const ESTADOS = ["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"];
+
+function NovoCadastro({ onSaved }) {
+  const empty = {nome_completo:"",cpf:"",data_nascimento:"",cep:"",numero:"",rua:"",complemento:"",bairro:"",cidade:"",estado:"",telefone:"",email:"",emerg_nome:"",emerg_telefone:"",projeto:"",data_visita:"",observacoes:""};
+  const [f,setF] = useState(empty);
+  const [projetos,setProjetos] = useState([]);
+  const [loading,setLoading]   = useState(false);
+  const [toast,showToast]      = useToast();
+  const set = k => v => setF(p=>({...p,[k]:v}));
+
+  useEffect(()=>{ supa("/projetos?status=eq.ativo&select=id,nome").then(r=>setProjetos(r||[])).catch(()=>{}); },[]);
+
+  async function buscarCep(cep) {
+    const c = cep.replace(/\D/g,"");
+    if(c.length!==8) return;
+    try {
+      const r = await fetch(`https://viacep.com.br/ws/${c}/json/`);
+      const d = await r.json();
+      if(d.erro) return;
+      setF(p=>({...p,rua:d.logradouro||"",bairro:d.bairro||"",cidade:d.localidade||"",estado:d.uf||""}));
+    } catch(_){}
+  }
+
+  async function salvar() {
+    if(!f.nome_completo||!f.cpf||!f.projeto||!f.data_visita){showToast("Preencha os campos obrigatórios.","error");return;}
+    setLoading(true);
+    try {
+      const pessoa = await supa("/pessoas",{method:"POST",body:JSON.stringify({
+        nome_completo:f.nome_completo,cpf:f.cpf.replace(/\D/g,""),data_nascimento:f.data_nascimento||null,
+        cep:f.cep,rua:f.rua,numero:f.numero,complemento:f.complemento,bairro:f.bairro,cidade:f.cidade,estado:f.estado,
+        telefone:f.telefone,email:f.email,emerg_nome:f.emerg_nome,emerg_telefone:f.emerg_telefone,
+      })});
+      await supa("/visitas",{method:"POST",body:JSON.stringify({
+        pessoa_id:pessoa[0].id,projeto:f.projeto,data_visita:f.data_visita,observacoes:f.observacoes||null,
+      })});
+      showToast("Cadastro salvo com sucesso!");
+      setF(empty);
+      setTimeout(()=>onSaved?.(),1200);
+    } catch(e){
+      showToast(e.message.includes("unique")?"CPF já cadastrado.":"Erro: "+e.message,"error");
+    } finally{setLoading(false);}
+  }
+
+  // Row2 removido — usa Grid2 global
+
+  return (
+    <div>
+      <Toast {...(toast||{})} />
+      <PageHeader title="Novo Cadastro" subtitle="Registre uma nova pessoa" />
+
+      <Card style={{marginBottom:20}}>
+        <SecaoTitulo icon="👤">Dados Pessoais</SecaoTitulo>
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
+          <Input label="Nome Completo" value={f.nome_completo} onChange={set("nome_completo")} placeholder="Ex: Maria Aparecida da Silva" required />
+          <Grid2>
+            <Input label="CPF" value={f.cpf} onChange={set("cpf")} placeholder="000.000.000-00" required />
+            <Input label="Data de Nascimento" value={f.data_nascimento} onChange={set("data_nascimento")} type="date" />
+          </Grid2>
+        </div>
+      </Card>
+
+      <Card style={{marginBottom:20}}>
+        <SecaoTitulo icon="📍">Endereço</SecaoTitulo>
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr auto 110px",gap:10,alignItems:"end"}}>
+            <Input label="CEP" value={f.cep} onChange={set("cep")} onBlur={e=>{const c=e.target.value.replace(/\D/g,"");if(c.length===8)buscarCep(e.target.value);}} placeholder="00000-000" />
+            <Btn onClick={()=>buscarCep(f.cep)} style={{height:40}}>🔍</Btn>
+            <Input label="Número" value={f.numero} onChange={set("numero")} placeholder="123" required />
+          </div>
+          <Input label="Rua / Logradouro" value={f.rua} onChange={set("rua")} placeholder="Preenchido pelo CEP" required />
+          <Grid2>
+            <Input label="Complemento" value={f.complemento} onChange={set("complemento")} placeholder="Apto, Bloco..." />
+            <Input label="Bairro" value={f.bairro} onChange={set("bairro")} placeholder="Preenchido pelo CEP" required />
+          </Grid2>
+          <Grid2>
+            <Input label="Cidade" value={f.cidade} onChange={set("cidade")} placeholder="Preenchido pelo CEP" required />
+            <Select label="Estado" value={f.estado} onChange={set("estado")} required
+              options={[{value:"",label:"Selecione..."},...ESTADOS.map(e=>({value:e,label:e}))]} />
+          </Grid2>
+        </div>
+      </Card>
+
+      <Card style={{marginBottom:20}}>
+        <SecaoTitulo icon="📞">Contato</SecaoTitulo>
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
+          <Grid2>
+            <Input label="Telefone / WhatsApp" value={f.telefone} onChange={set("telefone")} placeholder="(48) 99999-9999" />
+            <Input label="E-mail" value={f.email} onChange={set("email")} placeholder="email@exemplo.com" type="email" />
+          </Grid2>
+          <Grid2>
+            <Input label="Nome — Emergência" value={f.emerg_nome} onChange={set("emerg_nome")} placeholder="Ex: João Silva" />
+            <Input label="Tel — Emergência" value={f.emerg_telefone} onChange={set("emerg_telefone")} placeholder="(48) 98888-8888" />
+          </Grid2>
+        </div>
+      </Card>
+
+      <Card style={{marginBottom:24}}>
+        <SecaoTitulo icon="🗓">Primeira Visita</SecaoTitulo>
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
+          <Grid2>
+            <Select label="Projeto" value={f.projeto} onChange={set("projeto")} required
+              options={[{value:"",label:"Selecione..."},...projetos.map(p=>({value:p.nome,label:p.nome}))]} />
+            <Input label="Data da Visita" value={f.data_visita} onChange={set("data_visita")} type="date" required />
+          </Grid2>
+          <Textarea label="Observações" value={f.observacoes} onChange={set("observacoes")} placeholder="Informações adicionais..." />
+        </div>
+      </Card>
+
+      <Btn onClick={salvar} disabled={loading} color="#e07020">👤 {loading?"Salvando...":"Salvar Cadastro"}</Btn>
+    </div>
+  );
+}
+
+// ─── PESSOAS ────────────────────────────────────────────────────────────────
+
+function Pessoas({ setPage, setPessoaId, user }) {
+  const [nome,setNome]       = useState("");
+  const [projeto,setProjeto] = useState("");
+  const [cidade,setCidade]   = useState("");
+  const [results,setResults] = useState(null);
+  const [projetos,setProjetos] = useState([]);
+  const [loading,setLoading] = useState(false);
+  const [toast,showToast]    = useToast();
+
+  useEffect(()=>{ supa("/projetos?status=eq.ativo&select=id,nome").then(r=>setProjetos(r||[])).catch(()=>{}); },[]);
+
+  async function buscar() {
+    setLoading(true);
+    try {
+      let q="/pessoas?select=id,nome_completo,cpf,cidade,estado,telefone&order=nome_completo.asc&limit=100";
+      if(nome) q+=`&or=(nome_completo.ilike.*${nome}*,cpf.ilike.*${nome.replace(/\D/g,"")}*)`;
+      if(cidade) q+=`&cidade=ilike.*${cidade}*`;
+      const rows = await supa(q);
+      if(projeto){
+        const vr = await supa(`/visitas?projeto=eq.${encodeURIComponent(projeto)}&select=pessoa_id`);
+        const ids = new Set((vr||[]).map(v=>v.pessoa_id));
+        setResults((rows||[]).filter(p=>ids.has(p.id)));
+      } else setResults(rows||[]);
+    } catch(e){showToast("Erro na busca.","error");}
+    finally{setLoading(false);}
+  }
+
+  async function excluir(id) {
+    if(!confirm("Excluir esta pessoa e todas as visitas?")) return;
+    try {
+      await supa(`/visitas?pessoa_id=eq.${id}`,{method:"DELETE",prefer:""});
+      await supa(`/pessoas?id=eq.${id}`,{method:"DELETE",prefer:""});
+      showToast("Excluído.");
+      setResults(r=>r.filter(p=>p.id!==id));
+    } catch(e){showToast("Erro ao excluir.","error");}
+  }
+
+  return (
+    <div>
+      <Toast {...(toast||{})} />
+      <PageHeader title="Pessoas" subtitle="Busque e gerencie os cadastros" />
+      <Card style={{marginBottom:20}}>
+        <div style={{display:"grid",gridTemplateColumns:"2fr 1.5fr 1.5fr auto",gap:12,alignItems:"end"}}>
+          <Input label="Nome ou CPF" value={nome} onChange={setNome} placeholder="Buscar..." />
+          <Select label="Projeto" value={projeto} onChange={setProjeto}
+            options={[{value:"",label:"Todos"},...projetos.map(p=>({value:p.nome,label:p.nome}))]} />
+          <Input label="Cidade" value={cidade} onChange={setCidade} placeholder="Cidade..." />
+          <Btn onClick={buscar} disabled={loading} color={C.azulMedio}>🔍 Buscar</Btn>
+        </div>
+      </Card>
+
+      {results===null
+        ? <div style={{textAlign:"center",padding:"60px 0",color:C.cinzaMedio}}>
+            <div style={{fontSize:40,marginBottom:8}}>🔍</div>
+            <div>Use os filtros para buscar.</div>
+          </div>
+        : results.length===0
+          ? <div style={{textAlign:"center",padding:"60px 0",color:C.cinzaMedio}}>Nenhuma pessoa encontrada.</div>
+          : <Card>
+              <div style={{fontSize:13,color:C.cinzaMedio,marginBottom:12}}>{results.length} resultado(s)</div>
+              <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                <thead>
+                  <tr style={{background:C.azulEscuro}}>
+                    {["Nome","CPF","Cidade/UF","Telefone","Ações"].map(h=>(
+                      <th key={h} style={{padding:"10px 12px",textAlign:"left",color:C.branco,fontWeight:700,fontSize:11,letterSpacing:".06em"}}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {results.map((p,i)=>(
+                    <tr key={p.id} style={{background:i%2===0?C.branco:C.cinzaClaro}}>
+                      <td style={{padding:"9px 12px",fontWeight:600}}>{p.nome_completo}</td>
+                      <td style={{padding:"9px 12px",color:C.cinzaMedio}}>{p.cpf}</td>
+                      <td style={{padding:"9px 12px"}}>{[p.cidade,p.estado].filter(Boolean).join("/")||"—"}</td>
+                      <td style={{padding:"9px 12px"}}>{p.telefone||"—"}</td>
+                      <td style={{padding:"9px 12px"}}>
+                        <div style={{display:"flex",gap:6}}>
+                          <Btn small outline color={C.azulMedio} onClick={()=>{setPessoaId(p.id);setPage("perfil-pessoa");}}>Ver</Btn>
+                          {usePerfil(user).podeEditar && (
+                            <Btn small outline color={C.vermelho} onClick={()=>excluir(p.id)}>Excluir</Btn>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
+      }
+    </div>
+  );
+}
+
+// ─── PERFIL PESSOA ───────────────────────────────────────────────────────────
+
+function PerfilPessoa({ pessoaId, setPage, user }) {
+  const [pessoa,setPessoa]   = useState(null);
+  const [visitas,setVisitas] = useState([]);
+  const [projetos,setProjetos] = useState([]);
+  const [nova,setNova]       = useState({projeto:"",data_visita:"",observacoes:""});
+  const [loading,setLoading] = useState(false);
+  const [toast,showToast]    = useToast();
+
+  useEffect(()=>{
+    if(!pessoaId) return;
+    Promise.all([
+      supa(`/pessoas?id=eq.${pessoaId}&select=*`),
+      supa(`/visitas?pessoa_id=eq.${pessoaId}&select=*&order=data_visita.desc`),
+      supa("/projetos?status=eq.ativo&select=id,nome"),
+    ]).then(([p,v,pr])=>{ setPessoa(p?.[0]||null); setVisitas(v||[]); setProjetos(pr||[]); }).catch(()=>{});
+  },[pessoaId]);
+
+  async function adicionarVisita() {
+    if(!nova.projeto||!nova.data_visita){showToast("Projeto e data obrigatórios.","error");return;}
+    setLoading(true);
+    try {
+      await supa("/visitas",{method:"POST",body:JSON.stringify({pessoa_id:pessoaId,...nova})});
+      const v = await supa(`/visitas?pessoa_id=eq.${pessoaId}&select=*&order=data_visita.desc`);
+      setVisitas(v||[]);
+      setNova({projeto:"",data_visita:"",observacoes:""});
+      showToast("Visita registrada!");
+    } catch(e){showToast("Erro.","error");}finally{setLoading(false);}
+  }
+
+  if(!pessoa) return <div style={{color:C.cinzaMedio,padding:40}}>Carregando...</div>;
+
+  return (
+    <div>
+      <Toast {...(toast||{})} />
+      <div style={{marginBottom:16}}><Btn small outline color={C.cinzaMedio} onClick={()=>setPage("pessoas")}>← Voltar</Btn></div>
+      <PageHeader title={pessoa.nome_completo} subtitle={`CPF: ${pessoa.cpf}`} />
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:20}}>
+        <Card>
+          <SecaoTitulo icon="📍">Endereço</SecaoTitulo>
+          <p style={{fontSize:13,lineHeight:1.8,color:C.cinzaEscuro,margin:0}}>
+            {pessoa.rua&&<>{pessoa.rua}, {pessoa.numero}<br/></>}
+            {pessoa.complemento&&<>{pessoa.complemento}<br/></>}
+            {pessoa.bairro&&<>{pessoa.bairro}<br/></>}
+            {pessoa.cidade&&<>{pessoa.cidade} – {pessoa.estado}</>}
+          </p>
+        </Card>
+        <Card>
+          <SecaoTitulo icon="📞">Contato</SecaoTitulo>
+          <div style={{fontSize:13,lineHeight:2}}>
+            {pessoa.telefone&&<div>📱 {pessoa.telefone}</div>}
+            {pessoa.email&&<div>✉️ {pessoa.email}</div>}
+            {pessoa.emerg_nome&&<div>🚨 {pessoa.emerg_nome} — {pessoa.emerg_telefone}</div>}
+          </div>
+        </Card>
+      </div>
+      {usePerfil(user).podeEditar && (
+      <Card style={{marginBottom:20}}>
+        <SecaoTitulo icon="➕">Registrar Nova Visita</SecaoTitulo>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
+          <Select label="Projeto" value={nova.projeto} onChange={v=>setNova(p=>({...p,projeto:v}))} required
+            options={[{value:"",label:"Selecione..."},...projetos.map(p=>({value:p.nome,label:p.nome}))]} />
+          <Input label="Data" value={nova.data_visita} onChange={v=>setNova(p=>({...p,data_visita:v}))} type="date" required />
+        </div>
+        <Textarea label="Observações" value={nova.observacoes} onChange={v=>setNova(p=>({...p,observacoes:v}))} placeholder="..." rows={2} />
+        <div style={{marginTop:14}}><Btn onClick={adicionarVisita} disabled={loading} small>+ Adicionar Visita</Btn></div>
+      </Card>
+      )}
+      <Card>
+        <SecaoTitulo icon="📋">Histórico de Visitas ({visitas.length})</SecaoTitulo>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+          <thead>
+            <tr style={{background:C.azulEscuro}}>
+              {["Data","Projeto","Observação"].map(h=>(
+                <th key={h} style={{padding:"9px 12px",textAlign:"left",color:C.branco,fontWeight:700,fontSize:11}}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {visitas.length===0
+              ? <tr><td colSpan={3} style={{padding:16,color:C.cinzaMedio,textAlign:"center"}}>Nenhuma visita.</td></tr>
+              : visitas.map((v,i)=>(
+                <tr key={v.id} style={{background:i%2===0?C.branco:C.cinzaClaro}}>
+                  <td style={{padding:"8px 12px",whiteSpace:"nowrap"}}>{v.data_visita?new Date(v.data_visita+"T12:00:00").toLocaleDateString("pt-BR"):"—"}</td>
+                  <td style={{padding:"8px 12px"}}>{v.projeto}</td>
+                  <td style={{padding:"8px 12px",color:C.cinzaMedio}}>{v.observacoes||"—"}</td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </Card>
+    </div>
+  );
+}
+
+// ─── REGISTRAR VISITA ────────────────────────────────────────────────────────
+
+function RegistrarVisita() {
+  const [busca,setBusca]     = useState("");
+  const [pessoa,setPessoa]   = useState(null);
+  const [projetos,setProjetos] = useState([]);
+  const [form,setForm]       = useState({projeto:"",data_visita:new Date().toISOString().split("T")[0],observacoes:""});
+  const [loading,setLoading] = useState(false);
+  const [toast,showToast]    = useToast();
+
+  useEffect(()=>{ supa("/projetos?status=eq.ativo&select=id,nome").then(r=>setProjetos(r||[])).catch(()=>{}); },[]);
+
+  async function buscarPessoa() {
+    if(!busca.trim()) return;
+    const q = busca.replace(/\D/g,"").length>8
+      ? `/pessoas?cpf=eq.${busca.replace(/\D/g,"")}&select=*`
+      : `/pessoas?nome_completo=ilike.*${busca}*&select=*&limit=5`;
+    try {
+      const r = await supa(q);
+      if(!r?.length){showToast("Nenhuma pessoa encontrada.","error");setPessoa(null);return;}
+      setPessoa(r[0]);
+    } catch(e){showToast("Erro.","error");}
+  }
+
+  async function registrar() {
+    if(!pessoa||!form.projeto||!form.data_visita){showToast("Preencha todos os campos.","error");return;}
+    setLoading(true);
+    try {
+      await supa("/visitas",{method:"POST",body:JSON.stringify({pessoa_id:pessoa.id,...form})});
+      showToast("Visita registrada!");
+      setForm({projeto:"",data_visita:new Date().toISOString().split("T")[0],observacoes:""});
+      setPessoa(null);setBusca("");
+    } catch(e){showToast("Erro.","error");}finally{setLoading(false);}
+  }
+
+  return (
+    <div>
+      <Toast {...(toast||{})} />
+      <PageHeader title="Registrar Visita" subtitle="Adicione uma visita a uma pessoa cadastrada" />
+      <Card style={{marginBottom:20}}>
+        <SecaoTitulo icon="🔍">Buscar Pessoa</SecaoTitulo>
+        <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:12,alignItems:"end"}}>
+          <Input label="Nome ou CPF" value={busca} onChange={setBusca} placeholder="Digite o nome ou CPF..." />
+          <Btn onClick={buscarPessoa} color={C.azulMedio}>🔍 Buscar</Btn>
+        </div>
+      </Card>
+      {pessoa && (
+        <Card>
+          <div style={{background:"#e8f4ec",border:`1px solid ${C.verde}40`,borderRadius:8,padding:"12px 16px",marginBottom:20}}>
+            <div style={{fontWeight:700,color:C.verde}}>{pessoa.nome_completo}</div>
+            <div style={{fontSize:12,color:C.cinzaMedio}}>CPF: {pessoa.cpf} · {[pessoa.cidade,pessoa.estado].filter(Boolean).join("/")||""}</div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
+            <Select label="Projeto" value={form.projeto} onChange={v=>setForm(p=>({...p,projeto:v}))} required
+              options={[{value:"",label:"Selecione..."},...projetos.map(p=>({value:p.nome,label:p.nome}))]} />
+            <Input label="Data" value={form.data_visita} onChange={v=>setForm(p=>({...p,data_visita:v}))} type="date" required />
+          </div>
+          <Textarea label="Observações" value={form.observacoes} onChange={v=>setForm(p=>({...p,observacoes:v}))} placeholder="..." rows={3} />
+          <div style={{marginTop:16}}><Btn onClick={registrar} disabled={loading} color={C.verde}>✅ {loading?"Registrando...":"Registrar Visita"}</Btn></div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ─── RELATÓRIOS ──────────────────────────────────────────────────────────────
+
+function Relatorios() {
+  const [filtros,setFiltros] = useState({nome:"",projeto:"",dataInicio:"",dataFim:""});
+  const [projetos,setProjetos] = useState([]);
+  const [rows,setRows]       = useState(null);
+  const [loading,setLoading] = useState(false);
+  const [toast,showToast]    = useToast();
+  const setF = k => v => setFiltros(p=>({...p,[k]:v}));
+
+  useEffect(()=>{ supa("/projetos?status=eq.ativo&select=id,nome").then(r=>setProjetos(r||[])).catch(()=>{}); },[]);
+
+  async function gerar() {
+    setLoading(true);
+    try {
+      let q="/visitas?select=id,data_visita,projeto,observacoes,pessoas(nome_completo,cpf,cidade,estado,telefone)&order=data_visita.desc&limit=500";
+      if(filtros.projeto) q+=`&projeto=eq.${encodeURIComponent(filtros.projeto)}`;
+      if(filtros.dataInicio) q+=`&data_visita=gte.${filtros.dataInicio}`;
+      if(filtros.dataFim)    q+=`&data_visita=lte.${filtros.dataFim}`;
+      let r = await supa(q);
+      if(filtros.nome){
+        const n=filtros.nome.toLowerCase();
+        r=r.filter(v=>v.pessoas?.nome_completo?.toLowerCase().includes(n)||v.pessoas?.cpf?.includes(n));
+      }
+      setRows(r||[]);
+    } catch(e){showToast("Erro.","error");}finally{setLoading(false);}
+  }
+
+  function exportarCSV() {
+    if(!rows?.length) return;
+    const h="Nome,CPF,Cidade,UF,Telefone,Projeto,Data,Observação\n";
+    const l=rows.map(v=>[v.pessoas?.nome_completo,v.pessoas?.cpf,v.pessoas?.cidade,v.pessoas?.estado,v.pessoas?.telefone,v.projeto,v.data_visita,v.observacoes].map(c=>`"${(c||"").replace(/"/g,'""')}"`).join(",")).join("\n");
+    const blob=new Blob(["\ufeff"+h+l],{type:"text/csv;charset=utf-8;"});
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(blob);
+    a.download=`cevil_relatorio_${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+  }
+
+  return (
+    <div>
+      <Toast {...(toast||{})} />
+      <PageHeader title="Relatórios" subtitle="Filtre e exporte dados" />
+      <Card style={{marginBottom:20}}>
+        <SecaoTitulo icon="🔑">Filtros</SecaoTitulo>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+          <Input label="Nome ou CPF" value={filtros.nome} onChange={setF("nome")} placeholder="Buscar..." />
+          <Select label="Projeto" value={filtros.projeto} onChange={setF("projeto")}
+            options={[{value:"",label:"Todos"},...projetos.map(p=>({value:p.nome,label:p.nome}))]} />
+          <Input label="Data Início" value={filtros.dataInicio} onChange={setF("dataInicio")} type="date" />
+          <Input label="Data Fim"    value={filtros.dataFim}    onChange={setF("dataFim")}    type="date" />
+        </div>
+        <div style={{display:"flex",gap:10,marginTop:16}}>
+          <Btn onClick={gerar} disabled={loading} color={C.azulEscuro}>▦ {loading?"Gerando...":"Gerar Relatório"}</Btn>
+          {rows?.length>0 && <Btn onClick={exportarCSV} outline color={C.azulEscuro}>⬇ Exportar CSV</Btn>}
+        </div>
+      </Card>
+      {rows!==null && (
+        <Card>
+          <div style={{fontSize:13,color:C.cinzaMedio,marginBottom:12}}>{rows.length} registro(s)</div>
+          {rows.length===0
+            ? <div style={{textAlign:"center",color:C.cinzaMedio,padding:"40px 0"}}>Nenhum resultado.</div>
+            : <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                <thead>
+                  <tr style={{background:C.azulEscuro}}>
+                    {["Nome","CPF","Cidade","Tel","Projeto","Data","Obs."].map(h=>(
+                      <th key={h} style={{padding:"9px 10px",textAlign:"left",color:C.branco,fontWeight:700,fontSize:11}}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((v,i)=>(
+                    <tr key={v.id} style={{background:i%2===0?C.branco:C.cinzaClaro}}>
+                      <td style={{padding:"7px 10px"}}>{v.pessoas?.nome_completo}</td>
+                      <td style={{padding:"7px 10px",color:C.cinzaMedio}}>{v.pessoas?.cpf}</td>
+                      <td style={{padding:"7px 10px"}}>{[v.pessoas?.cidade,v.pessoas?.estado].filter(Boolean).join("/")}</td>
+                      <td style={{padding:"7px 10px"}}>{v.pessoas?.telefone||"—"}</td>
+                      <td style={{padding:"7px 10px"}}>{v.projeto}</td>
+                      <td style={{padding:"7px 10px",whiteSpace:"nowrap"}}>{v.data_visita?new Date(v.data_visita+"T12:00:00").toLocaleDateString("pt-BR"):"—"}</td>
+                      <td style={{padding:"7px 10px",color:C.cinzaMedio}}>{v.observacoes||"—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+          }
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ─── TESOURARIA ──────────────────────────────────────────────────────────────
+
+function Tesouraria() {
+  const emptyLanc = {descricao:"",tipo:"entrada",valor:"",data:"",categoria:"",projeto:"",observacoes:""};
+  const [lancamentos,setLancamentos] = useState([]);
+  const [projetos,setProjetos]       = useState([]);
+  const [form,setForm]               = useState(emptyLanc);
+  const [filtros,setFiltros]         = useState({tipo:"",projeto:"",dataInicio:"",dataFim:""});
+  const [aba,setAba]                 = useState("lancamentos");
+  const [loading,setLoading]         = useState(false);
+  const [toast,showToast]            = useToast();
+  const setF = k=>v=>setForm(p=>({...p,[k]:v}));
+  const setFil = k=>v=>setFiltros(p=>({...p,[k]:v}));
+
+  const CATEGORIAS_ENT = ["Doação","Convênio","Projeto","Evento","Patrocínio","Outros"];
+  const CATEGORIAS_SAI = ["Alimentação","Material","Pessoal","Aluguel","Transporte","Serviços","Manutenção","Eventos","Outros"];
+
+  async function loadLanc() {
+    try {
+      let q="/financeiro?select=*&order=data.desc&limit=500";
+      if(filtros.tipo==="saida") { // saídas nunca incluem mensalidades
+        if(filtros.projeto)    q+=`&projeto=eq.${encodeURIComponent(filtros.projeto)}`;
+        if(filtros.dataInicio) q+=`&data=gte.${filtros.dataInicio}`;
+        if(filtros.dataFim)    q+=`&data=lte.${filtros.dataFim}`;
+        const r = await supa(q);
+        setLancamentos(r||[]);
+        return;
+      }
+      // Buscar financeiro + mensalidades pagas em paralelo
+      let qFin = q;
+      if(filtros.projeto)    qFin+=`&projeto=eq.${encodeURIComponent(filtros.projeto)}`;
+      if(filtros.dataInicio) qFin+=`&data=gte.${filtros.dataInicio}`;
+      if(filtros.dataFim)    qFin+=`&data=lte.${filtros.dataFim}`;
+      if(filtros.tipo==="entrada") qFin+=`&tipo=eq.entrada`;
+      let qMens = "/mensalidades?pago=eq.true&select=id,valor,mes,ano,data_pagamento,associados(nome)";
+      if(filtros.dataInicio) qMens+=`&data_pagamento=gte.${filtros.dataInicio}`;
+      if(filtros.dataFim)    qMens+=`&data_pagamento=lte.${filtros.dataFim}`;
+      const [finRows, mensRows] = await Promise.all([
+        supa(qFin).catch(()=>[]),
+        supa(qMens).catch(()=>[]),
+      ]);
+      const mensLanc = (mensRows||[]).map(m=>({
+        id: "mens_"+m.id,
+        descricao: `Mensalidade — ${m.associados?.nome||"Associado"}`,
+        tipo: "entrada",
+        valor: m.valor,
+        data: m.data_pagamento||`${m.ano}-${String(m.mes).padStart(2,"0")}-01`,
+        categoria: "Mensalidade",
+        projeto: null,
+        observacoes: `Ref. ${String(m.mes).padStart(2,"0")}/${m.ano}`,
+        _virtual: true,
+      }));
+      const todos = [...(finRows||[]), ...(filtros.tipo==="entrada"||!filtros.tipo?mensLanc:[])]
+        .sort((a,b)=>new Date(b.data)-new Date(a.data));
+      setLancamentos(todos);
+    } catch(_){}
+  }
+
+  useEffect(()=>{
+    supa("/projetos?status=eq.ativo&select=id,nome").then(r=>setProjetos(r||[])).catch(()=>{});
+    loadLanc();
+  },[]);
+
+  async function salvarLanc() {
+    if(!form.descricao||!form.valor||!form.data||!form.categoria){showToast("Preencha os campos obrigatórios.","error");return;}
+    const valorNum = parseFloat(form.valor.replace(",","."));
+    if(isNaN(valorNum)||valorNum<=0){showToast("Valor inválido.","error");return;}
+    setLoading(true);
+    try {
+      await supa("/financeiro",{method:"POST",body:JSON.stringify({
+        descricao:form.descricao,tipo:form.tipo,valor:valorNum,data:form.data,
+        categoria:form.categoria,projeto:form.projeto||null,observacoes:form.observacoes||null,
+      })});
+      showToast(form.tipo==="entrada"?"Entrada registrada!":"Saída registrada!");
+      setForm(emptyLanc);
+      loadLanc();
+    } catch(e){showToast("Erro: "+e.message,"error");}finally{setLoading(false);}
+  }
+
+  async function excluirLanc(id) {
+    if(String(id).startsWith("mens_")){showToast("Mensalidades são gerenciadas no módulo Associados.","error");return;}
+    if(!confirm("Excluir este lançamento?")) return;
+    try {
+      await supa(`/financeiro?id=eq.${id}`,{method:"DELETE",prefer:""});
+      showToast("Excluído.");
+      setLancamentos(l=>l.filter(x=>x.id!==id));
+    } catch(e){showToast("Erro.","error");}
+  }
+
+  function exportarCSV() {
+    if(!lancamentos.length) return;
+    const h="Data,Tipo,Categoria,Descrição,Projeto,Valor,Observações\n";
+    const l=lancamentos.map(v=>[v.data,v.tipo,v.categoria,v.descricao,v.projeto||"",
+      v.valor.toFixed(2).replace(".",","),v.observacoes||""]
+      .map(c=>`"${(c||"").replace(/"/g,'""')}"`).join(",")).join("\n");
+    const blob=new Blob(["\ufeff"+h+l],{type:"text/csv;charset=utf-8;"});
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(blob);
+    a.download=`cevil_financeiro_${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+  }
+
+  const totalEntradas = lancamentos.filter(l=>l.tipo==="entrada").reduce((s,l)=>s+Number(l.valor),0);
+  const totalSaidas   = lancamentos.filter(l=>l.tipo==="saida").reduce((s,l)=>s+Number(l.valor),0);
+  const saldo         = totalEntradas - totalSaidas;
+  const fmt = v => v.toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+
+  const categoriasPorTipo = form.tipo==="entrada" ? CATEGORIAS_ENT : CATEGORIAS_SAI;
+
+  return (
+    <div>
+      <Toast {...(toast||{})} />
+      <PageHeader title="Tesouraria" subtitle="Controle financeiro da associação" />
+
+      {/* Cards resumo */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:16,marginBottom:24}}>
+        <div style={{background:C.branco,borderLeft:`4px solid ${C.verde}`,borderRadius:10,padding:"20px",boxShadow:"0 2px 8px rgba(0,0,0,.07)"}}>
+          <div style={{fontSize:11,color:C.cinzaMedio,textTransform:"uppercase",letterSpacing:".07em",marginBottom:4}}>Total Entradas</div>
+          <div style={{fontSize:26,fontWeight:700,color:C.verde,fontFamily:"'Merriweather',serif"}}>{fmt(totalEntradas)}</div>
+        </div>
+        <div style={{background:C.branco,borderLeft:`4px solid ${C.vermelho}`,borderRadius:10,padding:"20px",boxShadow:"0 2px 8px rgba(0,0,0,.07)"}}>
+          <div style={{fontSize:11,color:C.cinzaMedio,textTransform:"uppercase",letterSpacing:".07em",marginBottom:4}}>Total Saídas</div>
+          <div style={{fontSize:26,fontWeight:700,color:C.vermelho,fontFamily:"'Merriweather',serif"}}>{fmt(totalSaidas)}</div>
+        </div>
+        <div style={{background:C.branco,borderLeft:`4px solid ${saldo>=0?C.azulMedio:C.vermelho}`,borderRadius:10,padding:"20px",boxShadow:"0 2px 8px rgba(0,0,0,.07)"}}>
+          <div style={{fontSize:11,color:C.cinzaMedio,textTransform:"uppercase",letterSpacing:".07em",marginBottom:4}}>Saldo</div>
+          <div style={{fontSize:26,fontWeight:700,color:saldo>=0?C.azulMedio:C.vermelho,fontFamily:"'Merriweather',serif"}}>{fmt(saldo)}</div>
+        </div>
+      </div>
+
+      {/* Abas */}
+      <div style={{display:"flex",gap:0,marginBottom:20,borderBottom:`2px solid #e8e8e8`}}>
+        {[["lancamentos","Lançamentos"],["novo","Novo Lançamento"],["relatorio","Relatório"]].map(([id,label])=>(
+          <button key={id} onClick={()=>setAba(id)}
+            style={{padding:"10px 22px",background:"transparent",border:"none",
+              borderBottom:`2px solid ${aba===id?C.dourado:"transparent"}`,
+              color:aba===id?C.azulEscuro:C.cinzaMedio,fontWeight:aba===id?700:400,
+              fontSize:13,cursor:"pointer",marginBottom:-2,fontFamily:"inherit"}}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* ABA: Novo Lançamento */}
+      {aba==="novo" && (
+        <Card>
+          <SecaoTitulo icon="💰">Registrar Lançamento</SecaoTitulo>
+          <div style={{display:"flex",flexDirection:"column",gap:14}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+              <Select label="Tipo *" value={form.tipo} onChange={setF("tipo")}
+                options={[{value:"entrada",label:"✅ Entrada"},{value:"saida",label:"❌ Saída"}]} />
+              <Input label="Data *" value={form.data} onChange={setF("data")} type="date" required />
+            </div>
+            <Input label="Descrição *" value={form.descricao} onChange={setF("descricao")} placeholder="Ex: Doação de empresa parceira" required />
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+              <Input label="Valor (R$) *" value={form.valor} onChange={setF("valor")} placeholder="0,00" required />
+              <Select label="Categoria *" value={form.categoria} onChange={setF("categoria")} required
+                options={[{value:"",label:"Selecione..."},...categoriasPorTipo.map(c=>({value:c,label:c}))]} />
+            </div>
+            <Select label="Projeto (opcional)" value={form.projeto} onChange={setF("projeto")}
+              options={[{value:"",label:"Nenhum / Geral"},...projetos.map(p=>({value:p.nome,label:p.nome}))]} />
+            <Textarea label="Observações" value={form.observacoes} onChange={setF("observacoes")} placeholder="Informações adicionais..." rows={3} />
+            <div style={{display:"flex",gap:10,paddingTop:4}}>
+              <Btn onClick={salvarLanc} disabled={loading}
+                color={form.tipo==="entrada"?C.verde:C.vermelho}>
+                {loading?"Salvando...": form.tipo==="entrada"?"✅ Registrar Entrada":"❌ Registrar Saída"}
+              </Btn>
+              <Btn outline color={C.cinzaMedio} onClick={()=>setForm(emptyLanc)}>Limpar</Btn>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* ABA: Lançamentos */}
+      {aba==="lancamentos" && (
+        <Card>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            <SecaoTitulo icon="📋">Lançamentos</SecaoTitulo>
+            <Btn small outline color={C.azulEscuro} onClick={exportarCSV}>⬇ Exportar CSV</Btn>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:12,marginBottom:16}}>
+            <Select label="Tipo" value={filtros.tipo} onChange={setFil("tipo")}
+              options={[{value:"",label:"Todos"},{value:"entrada",label:"Entradas"},{value:"saida",label:"Saídas"}]} />
+            <Select label="Projeto" value={filtros.projeto} onChange={setFil("projeto")}
+              options={[{value:"",label:"Todos"},...projetos.map(p=>({value:p.nome,label:p.nome}))]} />
+            <Input label="Data Início" value={filtros.dataInicio} onChange={setFil("dataInicio")} type="date" />
+            <Input label="Data Fim"    value={filtros.dataFim}    onChange={setFil("dataFim")}    type="date" />
+          </div>
+          <Btn small color={C.azulMedio} onClick={loadLanc} style={{marginBottom:16}}>🔍 Filtrar</Btn>
+          {lancamentos.length===0
+            ? <div style={{textAlign:"center",padding:"40px 0",color:C.cinzaMedio}}>Nenhum lançamento encontrado.</div>
+            : <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+                <thead>
+                  <tr style={{background:C.azulEscuro}}>
+                    {["Data","Tipo","Categoria","Descrição","Projeto","Valor","Ações"].map(h=>(
+                      <th key={h} style={{padding:"9px 10px",textAlign:"left",color:C.branco,fontWeight:700,fontSize:11}}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {lancamentos.map((l,i)=>(
+                    <tr key={l.id} style={{background:i%2===0?C.branco:C.cinzaClaro}}>
+                      <td style={{padding:"8px 10px",whiteSpace:"nowrap"}}>{l.data?new Date(l.data+"T12:00:00").toLocaleDateString("pt-BR"):"—"}</td>
+                      <td style={{padding:"8px 10px"}}>
+                        <span style={{background:l.tipo==="entrada"?"#e6f7ec":"#fef0f0",
+                          color:l.tipo==="entrada"?C.verde:C.vermelho,
+                          padding:"2px 8px",borderRadius:12,fontSize:11,fontWeight:700}}>
+                          {l.tipo==="entrada"?"↑ Entrada":"↓ Saída"}
+                        </span>
+                      </td>
+                      <td style={{padding:"8px 10px"}}>{l.categoria||"—"}</td>
+                      <td style={{padding:"8px 10px"}}>{l.descricao}</td>
+                      <td style={{padding:"8px 10px",color:C.cinzaMedio}}>{l.projeto||"—"}</td>
+                      <td style={{padding:"8px 10px",fontWeight:700,color:l.tipo==="entrada"?C.verde:C.vermelho}}>
+                        {l.tipo==="saida"?"-":"+"}R$ {Number(l.valor).toLocaleString("pt-BR",{minimumFractionDigits:2})}
+                      </td>
+                      <td style={{padding:"8px 10px"}}>
+                        <Btn small outline color={C.vermelho} onClick={()=>excluirLanc(l.id)}>Excluir</Btn>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+          }
+        </Card>
+      )}
+
+      {/* ABA: Relatório */}
+      {aba==="relatorio" && (
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
+          <Card>
+            <SecaoTitulo icon="📊">Por Categoria — Entradas</SecaoTitulo>
+            {(() => {
+              const ent = lancamentos.filter(l=>l.tipo==="entrada");
+              const cats = {};
+              ent.forEach(l=>{cats[l.categoria]=(cats[l.categoria]||0)+Number(l.valor);});
+              const total = Object.values(cats).reduce((s,v)=>s+v,0)||1;
+              return Object.entries(cats).sort((a,b)=>b[1]-a[1]).map(([cat,val])=>(
+                <div key={cat} style={{marginBottom:10}}>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
+                    <span>{cat}</span><span style={{fontWeight:700,color:C.verde}}>{fmt(val)}</span>
+                  </div>
+                  <div style={{height:6,background:C.cinzaClaro,borderRadius:4}}>
+                    <div style={{width:`${Math.round((val/total)*100)}%`,height:"100%",background:C.verde,borderRadius:4}} />
+                  </div>
+                </div>
+              ));
+            })()}
+          </Card>
+          <Card>
+            <SecaoTitulo icon="📊">Por Categoria — Saídas</SecaoTitulo>
+            {(() => {
+              const sai = lancamentos.filter(l=>l.tipo==="saida");
+              const cats = {};
+              sai.forEach(l=>{cats[l.categoria]=(cats[l.categoria]||0)+Number(l.valor);});
+              const total = Object.values(cats).reduce((s,v)=>s+v,0)||1;
+              return Object.entries(cats).sort((a,b)=>b[1]-a[1]).map(([cat,val])=>(
+                <div key={cat} style={{marginBottom:10}}>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:4}}>
+                    <span>{cat}</span><span style={{fontWeight:700,color:C.vermelho}}>{fmt(val)}</span>
+                  </div>
+                  <div style={{height:6,background:C.cinzaClaro,borderRadius:4}}>
+                    <div style={{width:`${Math.round((val/total)*100)}%`,height:"100%",background:C.vermelho,borderRadius:4}} />
+                  </div>
+                </div>
+              ));
+            })()}
+          </Card>
+          <Card style={{gridColumn:"1/-1"}}>
+            <SecaoTitulo icon="📈">Resumo por Projeto</SecaoTitulo>
+            {(() => {
+              const pp = {};
+              lancamentos.forEach(l=>{
+                const key = l.projeto||"Geral";
+                if(!pp[key]) pp[key]={entrada:0,saida:0};
+                pp[key][l.tipo]+=Number(l.valor);
+              });
+              return (
+                <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+                  <thead>
+                    <tr style={{background:C.azulEscuro}}>
+                      {["Projeto","Entradas","Saídas","Saldo"].map(h=>(
+                        <th key={h} style={{padding:"9px 12px",textAlign:"left",color:C.branco,fontWeight:700,fontSize:11}}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(pp).map(([proj,v],i)=>(
+                      <tr key={proj} style={{background:i%2===0?C.branco:C.cinzaClaro}}>
+                        <td style={{padding:"8px 12px",fontWeight:600}}>{proj}</td>
+                        <td style={{padding:"8px 12px",color:C.verde,fontWeight:600}}>{fmt(v.entrada)}</td>
+                        <td style={{padding:"8px 12px",color:C.vermelho,fontWeight:600}}>{fmt(v.saida)}</td>
+                        <td style={{padding:"8px 12px",fontWeight:700,color:(v.entrada-v.saida)>=0?C.azulMedio:C.vermelho}}>
+                          {fmt(v.entrada-v.saida)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              );
+            })()}
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── PROJETOS ────────────────────────────────────────────────────────────────
+
+function Projetos() {
+  const [lista,setLista] = useState([]);
+  const [form,setForm]   = useState({nome:"",descricao:"",status:"ativo"});
+  const [toast,showToast] = useToast();
+
+  async function load(){ const r=await supa("/projetos?select=*&order=nome.asc"); setLista(r||[]); }
+  useEffect(()=>{load();},[]);
+
+  async function salvar(){
+    if(!form.nome){showToast("Nome obrigatório.","error");return;}
+    try {
+      await supa("/projetos",{method:"POST",body:JSON.stringify(form)});
+      showToast("Projeto salvo!");setForm({nome:"",descricao:"",status:"ativo"});load();
+    } catch(e){showToast(e.message.includes("unique")?"Nome já existe.":"Erro.","error");}
+  }
+  async function toggleStatus(p){
+    await supa(`/projetos?id=eq.${p.id}`,{method:"PATCH",body:JSON.stringify({status:p.status==="ativo"?"inativo":"ativo"})});load();
+  }
+  async function excluir(id){
+    if(!confirm("Excluir projeto?")) return;
+    await supa(`/projetos?id=eq.${id}`,{method:"DELETE",prefer:""});load();
+  }
+
+  return (
+    <div>
+      <Toast {...(toast||{})} />
+      <PageHeader title="Projetos" subtitle="Gerencie os projetos da associação" />
+      <Card style={{marginBottom:24}}>
+        <SecaoTitulo icon="➕">Novo Projeto</SecaoTitulo>
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
+          <Input label="Nome" value={form.nome} onChange={v=>setForm(p=>({...p,nome:v}))} placeholder="Ex: Educação e Reforço Escolar" required />
+          <Textarea label="Descrição" value={form.descricao} onChange={v=>setForm(p=>({...p,descricao:v}))} placeholder="Objetivo do projeto..." rows={3} />
+          <Select label="Status" value={form.status} onChange={v=>setForm(p=>({...p,status:v}))}
+            options={[{value:"ativo",label:"✅ Ativo"},{value:"inativo",label:"⏸ Inativo"}]} />
+        </div>
+        <div style={{marginTop:16}}><Btn onClick={salvar} color="#e07020">💾 Salvar</Btn></div>
+      </Card>
+      <Card>
+        <SecaoTitulo icon="📋">Projetos Cadastrados</SecaoTitulo>
+        {lista.length===0 ? <p style={{color:C.cinzaMedio,fontSize:13}}>Nenhum projeto.</p>
+          : <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+              <thead><tr style={{background:C.azulEscuro}}>
+                {["Nome","Descrição","Status","Ações"].map(h=>(
+                  <th key={h} style={{padding:"9px 12px",textAlign:"left",color:C.branco,fontWeight:700,fontSize:11}}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {lista.map((p,i)=>(
+                  <tr key={p.id} style={{background:i%2===0?C.branco:C.cinzaClaro}}>
+                    <td style={{padding:"9px 12px",fontWeight:600}}>{p.nome}</td>
+                    <td style={{padding:"9px 12px",color:C.cinzaMedio,maxWidth:280}}>{p.descricao||"—"}</td>
+                    <td style={{padding:"9px 12px"}}>
+                      <span style={{background:p.status==="ativo"?"#e6f7ec":"#f5f5f5",
+                        color:p.status==="ativo"?C.verde:C.cinzaMedio,
+                        padding:"2px 10px",borderRadius:20,fontSize:12,fontWeight:600}}>
+                        {p.status==="ativo"?"Ativo":"Inativo"}
+                      </span>
+                    </td>
+                    <td style={{padding:"9px 12px"}}>
+                      <div style={{display:"flex",gap:6}}>
+                        <Btn small outline color={p.status==="ativo"?C.cinzaMedio:C.verde} onClick={()=>toggleStatus(p)}>
+                          {p.status==="ativo"?"Desativar":"Ativar"}
+                        </Btn>
+                        <Btn small outline color={C.vermelho} onClick={()=>excluir(p.id)}>Excluir</Btn>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+        }
+      </Card>
+    </div>
+  );
+}
+
+// ─── USUÁRIOS ────────────────────────────────────────────────────────────────
+
+function Usuarios() {
+  const [lista,setLista] = useState([]);
+  const [form,setForm]   = useState({nome_completo:"",usuario:"",senha:"",confirmSenha:"",perfil:"visualizador"});
+  const [toast,showToast] = useToast();
+
+  async function load(){ const r=await supa("/sistema_usuarios?select=id,nome_completo,usuario,perfil,ativo,criado_em&order=nome_completo.asc"); setLista(r||[]); }
+  useEffect(()=>{load();},[]);
+
+  async function criar(){
+    const {nome_completo,usuario,senha,confirmSenha,perfil}=form;
+    if(!nome_completo||!usuario||!senha){showToast("Preencha todos os campos.","error");return;}
+    if(senha!==confirmSenha){showToast("Senhas não conferem.","error");return;}
+    if(senha.length<6){showToast("Mínimo 6 caracteres.","error");return;}
+    try {
+      await supa("/sistema_usuarios",{method:"POST",body:JSON.stringify({nome_completo,usuario,senha_hash:hashSimple(senha),perfil,ativo:true})});
+      showToast("Usuário criado!");
+      setForm({nome_completo:"",usuario:"",senha:"",confirmSenha:"",perfil:"visualizador"});load();
+    } catch(e){showToast(e.message.includes("unique")?"Usuário já existe.":"Erro.","error");}
+  }
+
+  async function toggleAtivo(u){
+    await supa(`/sistema_usuarios?id=eq.${u.id}`,{method:"PATCH",body:JSON.stringify({ativo:!u.ativo})});load();
+  }
+
+  return (
+    <div>
+      <Toast {...(toast||{})} />
+      <PageHeader title="Usuários" subtitle="Gerencie os acessos ao sistema" />
+      <div style={{background:"#f0eaff",border:"1px solid #c4aaee",borderRadius:8,padding:"10px 16px",fontSize:13,color:"#7c4dbb",marginBottom:20}}>
+        🔒 Área exclusiva de administradores.
+      </div>
+      <Card style={{marginBottom:24}}>
+        <SecaoTitulo icon="➕">Criar Usuário</SecaoTitulo>
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
+          <Input label="Nome Completo" value={form.nome_completo} onChange={v=>setForm(p=>({...p,nome_completo:v}))} placeholder="Ex: Ana Paula Ferreira" required />
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+            <Input label="Login" value={form.usuario} onChange={v=>setForm(p=>({...p,usuario:v}))} placeholder="ana.paula" required />
+            <Input label="Senha" value={form.senha} onChange={v=>setForm(p=>({...p,senha:v}))} type="password" placeholder="Mínimo 6 caracteres" required />
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
+            <Input label="Confirmar Senha" value={form.confirmSenha} onChange={v=>setForm(p=>({...p,confirmSenha:v}))} type="password" required />
+            <Select label="Perfil" value={form.perfil} onChange={v=>setForm(p=>({...p,perfil:v}))} required
+              options={[{value:"visualizador",label:"👁 Visualizador"},{value:"tesouraria",label:"💰 Tesouraria"},{value:"super_admin",label:"👑 Super Admin"}]} />
+          </div>
+        </div>
+        <div style={{marginTop:16}}><Btn onClick={criar} color="#7c4dbb">+ Criar Usuário</Btn></div>
+      </Card>
+      <Card>
+        <SecaoTitulo icon="👥">Usuários do Sistema</SecaoTitulo>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+          <thead><tr style={{background:"#7c4dbb"}}>
+            {["Nome","Usuário","Perfil","Status","Criado","Ações"].map(h=>(
+              <th key={h} style={{padding:"9px 12px",textAlign:"left",color:C.branco,fontWeight:700,fontSize:11}}>{h}</th>
+            ))}
+          </tr></thead>
+          <tbody>
+            {lista.length===0
+              ? <tr><td colSpan={6} style={{padding:16,color:C.cinzaMedio,textAlign:"center"}}>Nenhum usuário.</td></tr>
+              : lista.map((u,i)=>(
+                <tr key={u.id} style={{background:i%2===0?C.branco:C.cinzaClaro}}>
+                  <td style={{padding:"8px 12px",fontWeight:600}}>{u.nome_completo}</td>
+                  <td style={{padding:"8px 12px",color:C.cinzaMedio}}>{u.usuario}</td>
+                  <td style={{padding:"8px 12px"}}>
+                    <span style={{
+                      background:u.perfil==="super_admin"?"#f0eaff":u.perfil==="tesouraria"?"#fff8e6":"#e8f2fc",
+                      color:u.perfil==="super_admin"?"#7c4dbb":u.perfil==="tesouraria"?C.dourado:C.azulMedio,
+                      padding:"2px 8px",borderRadius:12,fontSize:12,fontWeight:700}}>
+                      {u.perfil==="super_admin"?"👑 Super Admin":u.perfil==="tesouraria"?"💰 Tesouraria":"👁 Visualizador"}
+                    </span>
+                  </td>
+                  <td style={{padding:"8px 12px"}}>
+                    <span style={{background:u.ativo?"#e6f7ec":"#fef0f0",color:u.ativo?C.verde:C.vermelho,padding:"2px 8px",borderRadius:12,fontSize:12,fontWeight:600}}>
+                      {u.ativo?"Ativo":"Inativo"}
+                    </span>
+                  </td>
+                  <td style={{padding:"8px 12px",color:C.cinzaMedio,whiteSpace:"nowrap"}}>{u.criado_em?new Date(u.criado_em).toLocaleDateString("pt-BR"):"—"}</td>
+                  <td style={{padding:"8px 12px"}}>
+                    <Btn small outline color={u.ativo?C.vermelho:C.verde} onClick={()=>toggleAtivo(u)}>
+                      {u.ativo?"Desativar":"Ativar"}
+                    </Btn>
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </Card>
+    </div>
+  );
+}
+
+// ─── MINHA CONTA ────────────────────────────────────────────────────────────
+
+function MinhaConta({ user }) {
+  const [senhaAtual,setSenhaAtual] = useState("");
+  const [senhaNova,setSenhaNova]   = useState("");
+  const [senhaConf,setSenhaConf]   = useState("");
+  const [toast,showToast]          = useToast();
+
+  async function trocarSenha(){
+    if(!senhaAtual||!senhaNova||!senhaConf){showToast("Preencha todos os campos.","error");return;}
+    if(senhaNova!==senhaConf){showToast("Senhas não conferem.","error");return;}
+    if(senhaNova.length<6){showToast("Mínimo 6 caracteres.","error");return;}
+    const rows=await supa(`/sistema_usuarios?id=eq.${user.id}&senha_hash=eq.${hashSimple(senhaAtual)}&select=id`);
+    if(!rows?.length){showToast("Senha atual incorreta.","error");return;}
+    await supa(`/sistema_usuarios?id=eq.${user.id}`,{method:"PATCH",body:JSON.stringify({senha_hash:hashSimple(senhaNova)})});
+    showToast("Senha alterada com sucesso!");
+    setSenhaAtual("");setSenhaNova("");setSenhaConf("");
+  }
+
+  return (
+    <div>
+      <Toast {...(toast||{})} />
+      <PageHeader title="Minha Conta" subtitle="Suas informações de acesso" />
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
+        <Card>
+          <SecaoTitulo icon="👤">Informações</SecaoTitulo>
+          <div style={{fontSize:14,lineHeight:2.2}}>
+            <div><strong>Nome:</strong> {user.nome_completo}</div>
+            <div><strong>Usuário:</strong> {user.usuario}</div>
+            <div><strong>Perfil:</strong> {user.perfil==="super_admin"?"Super Admin":user.perfil==="tesouraria"?"Tesouraria":"Visualizador"}</div>
+          </div>
+        </Card>
+        <Card>
+          <SecaoTitulo icon="🔑">Trocar Senha</SecaoTitulo>
+          <div style={{display:"flex",flexDirection:"column",gap:12}}>
+            <Input label="Senha Atual" value={senhaAtual} onChange={setSenhaAtual} type="password" placeholder="••••••" />
+            <Input label="Nova Senha"  value={senhaNova}  onChange={setSenhaNova}  type="password" placeholder="Mínimo 6 caracteres" />
+            <Input label="Confirmar"   value={senhaConf}  onChange={setSenhaConf}  type="password" placeholder="Repita a senha" />
+            <Btn onClick={trocarSenha} color={C.azulEscuro} full>🔑 Trocar Senha</Btn>
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+// ─── CONFIGURAÇÕES ───────────────────────────────────────────────────────────
+
+const SQL_SCRIPT = `-- TABELAS CEVIL
+CREATE TABLE IF NOT EXISTS pessoas (
+  id bigserial primary key,
+  nome_completo text not null,
+  cpf text not null unique,
+  data_nascimento date,
+  cep text, rua text, numero text,
+  complemento text, bairro text,
+  cidade text, estado text,
+  telefone text, email text,
+  emerg_nome text, emerg_telefone text,
+  criado_em timestamptz default now()
+);
+
+CREATE TABLE IF NOT EXISTS visitas (
+  id bigserial primary key,
+  pessoa_id bigint references pessoas(id) on delete cascade,
+  projeto text not null,
+  data_visita date not null,
+  observacoes text,
+  criado_em timestamptz default now()
+);
+
+CREATE TABLE IF NOT EXISTS projetos (
+  id bigserial primary key,
+  nome text not null unique,
+  descricao text,
+  status text default 'ativo',
+  criado_em timestamptz default now()
+);
+
+CREATE TABLE IF NOT EXISTS financeiro (
+  id bigserial primary key,
+  descricao text not null,
+  tipo text not null,
+  valor numeric(12,2) not null,
+  data date not null,
+  categoria text,
+  projeto text,
+  observacoes text,
+  criado_em timestamptz default now()
+);
+
+CREATE TABLE IF NOT EXISTS sistema_usuarios (
+  id bigserial primary key,
+  nome_completo text not null,
+  usuario text not null unique,
+  senha_hash text not null,
+  perfil text default 'normal',
+  ativo boolean default true,
+  criado_em timestamptz default now()
+);
+
+-- Desabilitar RLS
+ALTER TABLE pessoas          DISABLE ROW LEVEL SECURITY;
+ALTER TABLE visitas          DISABLE ROW LEVEL SECURITY;
+ALTER TABLE projetos         DISABLE ROW LEVEL SECURITY;
+ALTER TABLE financeiro       DISABLE ROW LEVEL SECURITY;
+ALTER TABLE sistema_usuarios DISABLE ROW LEVEL SECURITY;
+
+-- Usuários iniciais
+-- super_admin / admin123
+INSERT INTO sistema_usuarios (nome_completo,usuario,senha_hash,perfil)
+VALUES ('Administrador','admin','39c43b7d','super_admin')
+ON CONFLICT (usuario) DO NOTHING;
+
+-- tesouraria / tesouraria123
+INSERT INTO sistema_usuarios (nome_completo,usuario,senha_hash,perfil)
+VALUES ('Tesouraria CEVIL','tesouraria','3bb05aa1','tesouraria')
+ON CONFLICT (usuario) DO NOTHING;
+
+-- visualizador / cevil2026
+INSERT INTO sistema_usuarios (nome_completo,usuario,senha_hash,perfil)
+VALUES ('Visualizador','visualizador','6da329f9','visualizador')
+ON CONFLICT (usuario) DO NOTHING;
+
+-- ══════════════════════════════════════
+-- TABELAS DO EDITOR DO SITE
+-- ══════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS site_noticias (
+  id bigserial primary key,
+  titulo text not null,
+  resumo text not null,
+  conteudo text,
+  imagem_url text,
+  categoria text,
+  data_publicacao date default now(),
+  destaque boolean default false,
+  criado_em timestamptz default now()
+);
+
+CREATE TABLE IF NOT EXISTS site_membros (
+  id bigserial primary key,
+  nome text not null,
+  cargo text not null,
+  grupo text not null,
+  descricao text,
+  foto_url text,
+  ordem integer default 0,
+  criado_em timestamptz default now()
+);
+
+CREATE TABLE IF NOT EXISTS site_institucional (
+  chave text primary key,
+  valor text,
+  atualizado_em timestamptz default now()
+);
+
+CREATE TABLE IF NOT EXISTS site_causas (
+  id bigserial primary key,
+  titulo text not null,
+  descricao text not null,
+  imagem_url text,
+  meta_valor numeric(12,2) default 0,
+  arrecadado numeric(12,2) default 0,
+  ativo boolean default true,
+  criado_em timestamptz default now()
+);
+
+CREATE TABLE IF NOT EXISTS site_parceiros (
+  id bigserial primary key,
+  nome text not null,
+  tipo text default 'empresarial',
+  logo_url text,
+  site_url text,
+  descricao text,
+  criado_em timestamptz default now()
+);
+
+CREATE TABLE IF NOT EXISTS site_config (
+  chave text primary key,
+  valor text,
+  atualizado_em timestamptz default now()
+);
+
+CREATE TABLE IF NOT EXISTS site_galeria (
+  id bigserial primary key,
+  titulo text,
+  url text not null,
+  categoria text,
+  descricao text,
+  criado_em timestamptz default now()
+);
+
+-- Desabilitar RLS nas tabelas do site
+ALTER TABLE site_noticias    DISABLE ROW LEVEL SECURITY;
+ALTER TABLE site_membros     DISABLE ROW LEVEL SECURITY;
+ALTER TABLE site_institucional DISABLE ROW LEVEL SECURITY;
+ALTER TABLE site_causas      DISABLE ROW LEVEL SECURITY;
+ALTER TABLE site_parceiros   DISABLE ROW LEVEL SECURITY;
+ALTER TABLE site_config      DISABLE ROW LEVEL SECURITY;
+ALTER TABLE site_galeria     DISABLE ROW LEVEL SECURITY;
+
+CREATE TABLE IF NOT EXISTS associados (
+  id bigserial primary key,
+  matricula text unique,
+  nome text not null,
+  cpf text,
+  data_nascimento date,
+  telefone text,
+  email text,
+  endereco text,
+  bairro text,
+  cidade text,
+  estado text,
+  cep text,
+  plano text,
+  valor_mensalidade numeric(10,2) default 0,
+  data_filiacao date default now(),
+  status text default 'ativo',
+  observacoes text,
+  criado_em timestamptz default now()
+);
+
+CREATE TABLE IF NOT EXISTS mensalidades (
+  id bigserial primary key,
+  associado_id bigint references associados(id) on delete cascade,
+  mes integer not null,
+  ano integer not null,
+  valor numeric(10,2) not null,
+  pago boolean default false,
+  data_pagamento date,
+  criado_em timestamptz default now(),
+  UNIQUE(associado_id, mes, ano)
+);
+
+ALTER TABLE associados   DISABLE ROW LEVEL SECURITY;
+ALTER TABLE mensalidades DISABLE ROW LEVEL SECURITY;`;
+
+
+// ─── TRANSPARÊNCIA FINANCEIRA ─────────────────────────────────────────────────
+
+function TransparenciaFinanceira() {
+  const [lancamentos, setLancamentos] = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [periodo, setPeriodo]         = useState("mes");   // mes | trimestre | ano | total
+  const [anoSel, setAnoSel]           = useState(new Date().getFullYear());
+  const [mesSel, setMesSel]           = useState(new Date().getMonth() + 1);
+
+  const meses = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+  const mesesCurto = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+  const fmt = v => Number(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+
+  async function load() {
+    setLoading(true);
+    try {
+      const [finRows, mensRows] = await Promise.all([
+        supa("/financeiro?select=*&order=data.asc").catch(()=>[]),
+        supa("/mensalidades?pago=eq.true&select=id,valor,mes,ano,data_pagamento,associados(nome)").catch(()=>[]),
+      ]);
+      const mensLanc = (mensRows||[]).map(m => ({
+        id: "mens_"+m.id,
+        descricao: `Mensalidade — ${m.associados?.nome||"Associado"}`,
+        tipo: "entrada",
+        valor: m.valor,
+        data: m.data_pagamento || `${m.ano}-${String(m.mes).padStart(2,"0")}-01`,
+        categoria: "Mensalidade",
+        projeto: null,
+        observacoes: `Ref. ${String(m.mes).padStart(2,"0")}/${m.ano}`,
+      }));
+      const todos = [...(finRows||[]), ...mensLanc].sort((a,b) => new Date(a.data) - new Date(b.data));
+      setLancamentos(todos);
+    } catch(_) {}
+    finally { setLoading(false); }
+  }
+
+  useEffect(() => { load(); }, []);
+
+  // ── Filtrar por período ────────────────────────────────────────────────────
+  function filtrar(rows) {
+    const ano = anoSel;
+    const mes = mesSel;
+    if (periodo === "mes")       return rows.filter(l => l.data?.startsWith(`${ano}-${String(mes).padStart(2,"0")}`));
+    if (periodo === "trimestre") {
+      const tri = Math.ceil(mes / 3);
+      const mInicio = (tri - 1) * 3 + 1;
+      const mFim    = tri * 3;
+      return rows.filter(l => {
+        if (!l.data) return false;
+        const [y, m] = l.data.split("-").map(Number);
+        return y === ano && m >= mInicio && m <= mFim;
+      });
+    }
+    if (periodo === "ano")  return rows.filter(l => l.data?.startsWith(`${ano}`));
+    return rows; // total
+  }
+
+  const dados = filtrar(lancamentos);
+  const entradas   = dados.filter(l => l.tipo === "entrada");
+  const saidas     = dados.filter(l => l.tipo === "saida");
+  const totEnt     = entradas.reduce((s, l) => s + Number(l.valor||0), 0);
+  const totSai     = saidas.reduce((s, l) => s + Number(l.valor||0), 0);
+  const saldo      = totEnt - totSai;
+
+  // ── Agrupar por categoria ──────────────────────────────────────────────────
+  function porCategoria(rows) {
+    const m = {};
+    rows.forEach(l => { m[l.categoria||"Outros"] = (m[l.categoria||"Outros"] || 0) + Number(l.valor||0); });
+    return Object.entries(m).sort((a,b) => b[1]-a[1]);
+  }
+  const catEnt = porCategoria(entradas);
+  const catSai = porCategoria(saidas);
+
+  // ── Evolução mensal (últimos 6 meses) ─────────────────────────────────────
+  const evolucao = (() => {
+    const hoje = new Date();
+    return Array.from({length:6}, (_,i) => {
+      const d = new Date(hoje.getFullYear(), hoje.getMonth() - 5 + i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+      const ent = lancamentos.filter(l => l.data?.startsWith(key) && l.tipo==="entrada").reduce((s,l)=>s+Number(l.valor||0),0);
+      const sai = lancamentos.filter(l => l.data?.startsWith(key) && l.tipo==="saida").reduce((s,l)=>s+Number(l.valor||0),0);
+      return { label: `${mesesCurto[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`, ent, sai, saldo: ent-sai };
+    });
+  })();
+  const maxEvolucao = Math.max(...evolucao.flatMap(e => [e.ent, e.sai]), 1);
+
+  // ── Label do período ───────────────────────────────────────────────────────
+  const labelPeriodo = () => {
+    if (periodo === "mes")       return `${meses[mesSel-1]} de ${anoSel}`;
+    if (periodo === "trimestre") return `${Math.ceil(mesSel/3)}º Trimestre de ${anoSel}`;
+    if (periodo === "ano")       return `Ano de ${anoSel}`;
+    return "Todos os períodos";
+  };
+
+  const anos = (() => {
+    const set = new Set(lancamentos.map(l => l.data?.split("-")[0]).filter(Boolean));
+    const arr = [...set].map(Number).sort((a,b)=>b-a);
+    if (!arr.includes(new Date().getFullYear())) arr.unshift(new Date().getFullYear());
+    return arr;
+  })();
+
+  const pctBar = (v, total) => total > 0 ? Math.min(Math.round((v/total)*100), 100) : 0;
+
+  return (
+    <div>
+      <PageHeader title="Portal de Transparência" subtitle="Visão financeira pública — somente leitura" />
+
+      {/* Aviso somente leitura */}
+      <div style={{background:"#f0f6ff",border:`1px solid ${C.azulMedio}40`,borderRadius:8,
+        padding:"10px 18px",fontSize:13,color:C.azulMedio,marginBottom:24,
+        display:"flex",alignItems:"center",gap:10}}>
+        <span style={{fontSize:18}}>📢</span>
+        <span>Este portal é <strong>somente leitura</strong>. As informações refletem os lançamentos registrados na Tesouraria.</span>
+      </div>
+
+      {/* Filtros de período */}
+      <Card style={{marginBottom:24}}>
+        <div style={{display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
+          <span style={{fontSize:13,fontWeight:700,color:C.azulEscuro}}>Período:</span>
+          {[["mes","Mensal"],["trimestre","Trimestral"],["ano","Anual"],["total","Total Geral"]].map(([v,l])=>(
+            <button key={v} onClick={()=>setPeriodo(v)}
+              style={{padding:"6px 16px",borderRadius:20,border:`2px solid ${periodo===v?C.dourado:C.cinzaClaro}`,
+                background:periodo===v?C.dourado:"transparent",color:periodo===v?C.branco:C.cinzaMedio,
+                fontWeight:periodo===v?700:400,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>
+              {l}
+            </button>
+          ))}
+          {periodo !== "total" && (
+            <>
+              {(periodo === "mes" || periodo === "trimestre") && (
+                <select value={mesSel} onChange={e=>setMesSel(Number(e.target.value))}
+                  style={{border:`1.5px solid #ddd`,borderRadius:5,padding:"6px 10px",fontSize:13,fontFamily:"inherit",cursor:"pointer"}}>
+                  {meses.map((m,i)=><option key={i} value={i+1}>{periodo==="trimestre"?`${Math.ceil((i+1)/3)}º Tri`:m}</option>).filter((_,i)=>periodo==="mes"||i%3===0)}
+                </select>
+              )}
+              <select value={anoSel} onChange={e=>setAnoSel(Number(e.target.value))}
+                style={{border:`1.5px solid #ddd`,borderRadius:5,padding:"6px 10px",fontSize:13,fontFamily:"inherit",cursor:"pointer"}}>
+                {anos.map(a=><option key={a} value={a}>{a}</option>)}
+              </select>
+            </>
+          )}
+          <span style={{marginLeft:"auto",fontSize:13,fontWeight:600,color:C.azulEscuro}}>{labelPeriodo()}</span>
+        </div>
+      </Card>
+
+      {loading ? <div style={{textAlign:"center",padding:80,color:C.cinzaMedio}}>Carregando dados...</div> : (<>
+
+      {/* Cards principais */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:20,marginBottom:24}}>
+        <div style={{background:C.branco,borderRadius:12,padding:"28px 24px",boxShadow:"0 2px 12px rgba(0,0,0,.07)",borderTop:`4px solid ${C.verde}`,textAlign:"center"}}>
+          <div style={{fontSize:11,color:C.cinzaMedio,textTransform:"uppercase",letterSpacing:".1em",marginBottom:8}}>Total de Entradas</div>
+          <div style={{fontSize:32,fontWeight:700,color:C.verde,fontFamily:"'Merriweather',serif"}}>{fmt(totEnt)}</div>
+          <div style={{fontSize:12,color:C.cinzaMedio,marginTop:6}}>{entradas.length} lançamento(s)</div>
+        </div>
+        <div style={{background:C.branco,borderRadius:12,padding:"28px 24px",boxShadow:"0 2px 12px rgba(0,0,0,.07)",borderTop:`4px solid ${C.vermelho}`,textAlign:"center"}}>
+          <div style={{fontSize:11,color:C.cinzaMedio,textTransform:"uppercase",letterSpacing:".1em",marginBottom:8}}>Total de Saídas</div>
+          <div style={{fontSize:32,fontWeight:700,color:C.vermelho,fontFamily:"'Merriweather',serif"}}>{fmt(totSai)}</div>
+          <div style={{fontSize:12,color:C.cinzaMedio,marginTop:6}}>{saidas.length} lançamento(s)</div>
+        </div>
+        <div style={{background:C.branco,borderRadius:12,padding:"28px 24px",boxShadow:"0 2px 12px rgba(0,0,0,.07)",borderTop:`4px solid ${saldo>=0?C.azulMedio:C.vermelho}`,textAlign:"center"}}>
+          <div style={{fontSize:11,color:C.cinzaMedio,textTransform:"uppercase",letterSpacing:".1em",marginBottom:8}}>Saldo do Período</div>
+          <div style={{fontSize:32,fontWeight:700,color:saldo>=0?C.azulMedio:C.vermelho,fontFamily:"'Merriweather',serif"}}>{fmt(saldo)}</div>
+          <div style={{fontSize:12,color:saldo>=0?C.verde:C.vermelho,marginTop:6,fontWeight:600}}>{saldo>=0?"✓ Superávit":"✗ Déficit"}</div>
+        </div>
+      </div>
+
+      {/* Gráfico de barras — evolução mensal */}
+      <Card style={{marginBottom:24}}>
+        <SecaoTitulo icon="📈">Evolução dos Últimos 6 Meses</SecaoTitulo>
+        <div style={{display:"flex",gap:12,alignItems:"flex-end",height:160,padding:"0 8px"}}>
+          {evolucao.map((e,i)=>(
+            <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+              <div style={{width:"100%",display:"flex",gap:3,alignItems:"flex-end",height:120}}>
+                <div style={{flex:1,background:C.verde+"cc",borderRadius:"3px 3px 0 0",height:`${pctBar(e.ent,maxEvolucao)}%`,minHeight:e.ent>0?4:0,transition:"height .5s"}} title={`Entradas: ${fmt(e.ent)}`} />
+                <div style={{flex:1,background:C.vermelho+"cc",borderRadius:"3px 3px 0 0",height:`${pctBar(e.sai,maxEvolucao)}%`,minHeight:e.sai>0?4:0,transition:"height .5s"}} title={`Saídas: ${fmt(e.sai)}`} />
+              </div>
+              <div style={{fontSize:10,color:C.cinzaMedio,textAlign:"center"}}>{e.label}</div>
+              <div style={{fontSize:9,color:e.saldo>=0?C.verde:C.vermelho,fontWeight:700}}>{e.saldo>=0?"+":""}{fmt(e.saldo)}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{display:"flex",gap:20,justifyContent:"center",marginTop:12}}>
+          <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:C.cinzaMedio}}>
+            <div style={{width:12,height:12,background:C.verde+"cc",borderRadius:2}} /> Entradas
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:C.cinzaMedio}}>
+            <div style={{width:12,height:12,background:C.vermelho+"cc",borderRadius:2}} /> Saídas
+          </div>
+        </div>
+      </Card>
+
+      {/* Categorias */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:24}}>
+        <Card>
+          <SecaoTitulo icon="📥">Entradas por Categoria</SecaoTitulo>
+          {catEnt.length===0 ? <p style={{color:C.cinzaMedio,fontSize:13}}>Nenhuma entrada no período.</p>
+          : catEnt.map(([cat,val])=>(
+            <div key={cat} style={{marginBottom:14}}>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:5}}>
+                <span style={{fontWeight:600,color:C.azulEscuro}}>{cat}</span>
+                <span style={{color:C.verde,fontWeight:700}}>{fmt(val)}</span>
+              </div>
+              <div style={{height:8,background:C.cinzaClaro,borderRadius:4,overflow:"hidden"}}>
+                <div style={{width:`${pctBar(val,totEnt)}%`,height:"100%",background:`linear-gradient(to right,${C.verde},#52c97a)`,borderRadius:4,transition:"width .5s"}} />
+              </div>
+              <div style={{fontSize:10,color:C.cinzaMedio,marginTop:2,textAlign:"right"}}>{pctBar(val,totEnt)}% do total</div>
+            </div>
+          ))}
+          {catEnt.length>0 && (
+            <div style={{borderTop:`1px solid ${C.cinzaClaro}`,paddingTop:10,marginTop:4,display:"flex",justifyContent:"space-between",fontSize:13}}>
+              <strong>Total</strong><strong style={{color:C.verde}}>{fmt(totEnt)}</strong>
+            </div>
+          )}
+        </Card>
+
+        <Card>
+          <SecaoTitulo icon="📤">Saídas por Categoria</SecaoTitulo>
+          {catSai.length===0 ? <p style={{color:C.cinzaMedio,fontSize:13}}>Nenhuma saída no período.</p>
+          : catSai.map(([cat,val])=>(
+            <div key={cat} style={{marginBottom:14}}>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:5}}>
+                <span style={{fontWeight:600,color:C.azulEscuro}}>{cat}</span>
+                <span style={{color:C.vermelho,fontWeight:700}}>{fmt(val)}</span>
+              </div>
+              <div style={{height:8,background:C.cinzaClaro,borderRadius:4,overflow:"hidden"}}>
+                <div style={{width:`${pctBar(val,totSai)}%`,height:"100%",background:`linear-gradient(to right,${C.vermelho},#e06060)`,borderRadius:4,transition:"width .5s"}} />
+              </div>
+              <div style={{fontSize:10,color:C.cinzaMedio,marginTop:2,textAlign:"right"}}>{pctBar(val,totSai)}% do total</div>
+            </div>
+          ))}
+          {catSai.length>0 && (
+            <div style={{borderTop:`1px solid ${C.cinzaClaro}`,paddingTop:10,marginTop:4,display:"flex",justifyContent:"space-between",fontSize:13}}>
+              <strong>Total</strong><strong style={{color:C.vermelho}}>{fmt(totSai)}</strong>
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* Tabela de lançamentos — somente leitura */}
+      <Card>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+          <SecaoTitulo icon="📋">Lançamentos do Período</SecaoTitulo>
+          <div style={{fontSize:12,color:C.cinzaMedio}}>{dados.length} registro(s)</div>
+        </div>
+        {dados.length===0
+          ? <div style={{textAlign:"center",padding:"40px 0",color:C.cinzaMedio}}>
+              <div style={{fontSize:40,marginBottom:8}}>📭</div>
+              <div>Nenhum lançamento no período selecionado.</div>
+            </div>
+          : <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+              <thead>
+                <tr style={{background:C.azulEscuro}}>
+                  {["Data","Tipo","Categoria","Descrição","Projeto","Valor"].map(h=>(
+                    <th key={h} style={{padding:"10px 12px",textAlign:"left",color:C.branco,fontWeight:700,fontSize:11,letterSpacing:".05em"}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[...dados].sort((a,b)=>new Date(b.data)-new Date(a.data)).map((l,i)=>(
+                  <tr key={l.id} style={{background:i%2===0?C.branco:C.cinzaClaro}}>
+                    <td style={{padding:"9px 12px",whiteSpace:"nowrap",color:C.cinzaMedio}}>
+                      {l.data?new Date(l.data+"T12:00:00").toLocaleDateString("pt-BR"):"—"}
+                    </td>
+                    <td style={{padding:"9px 12px"}}>
+                      <span style={{
+                        background:l.tipo==="entrada"?"#e6f7ec":"#fef0f0",
+                        color:l.tipo==="entrada"?C.verde:C.vermelho,
+                        padding:"2px 8px",borderRadius:12,fontSize:11,fontWeight:700
+                      }}>
+                        {l.tipo==="entrada"?"↑ Entrada":"↓ Saída"}
+                      </span>
+                    </td>
+                    <td style={{padding:"9px 12px",color:C.cinzaMedio}}>{l.categoria||"—"}</td>
+                    <td style={{padding:"9px 12px",fontWeight:600}}>{l.descricao}</td>
+                    <td style={{padding:"9px 12px",color:C.cinzaMedio}}>{l.projeto||"—"}</td>
+                    <td style={{padding:"9px 12px",fontWeight:700,color:l.tipo==="entrada"?C.verde:C.vermelho}}>
+                      {l.tipo==="entrada"?"+":"-"}{fmt(l.valor)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr style={{background:C.azulEscuro}}>
+                  <td colSpan={4} style={{padding:"10px 12px",color:C.branco,fontWeight:700,fontSize:12}}>TOTAL DO PERÍODO</td>
+                  <td style={{padding:"10px 12px",color:"#90cfa8",fontWeight:700}}>Entradas: {fmt(totEnt)}</td>
+                  <td style={{padding:"10px 12px",color:saldo>=0?"#90cfa8":"#f5a5a5",fontWeight:700,fontSize:14}}>
+                    Saldo: {fmt(saldo)}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+        }
+      </Card>
+
+      {/* Rodapé informativo */}
+      <div style={{textAlign:"center",padding:"24px 0",fontSize:12,color:C.cinzaMedio}}>
+        <div>📢 Portal de Transparência — Associação CEVIL</div>
+        <div style={{marginTop:4}}>Os dados apresentados refletem os registros financeiros da associação. Atualizado em tempo real.</div>
+      </div>
+
+      </>)}
+    </div>
+  );
+}
+
+
+// ─── ASSOCIADOS ──────────────────────────────────────────────────────────────
+
+function Associados({ user }) {
+  const [aba, setAba] = useState("lista");
+  const [toast, showToast] = useToast();
+  const { podeEditar } = usePerfil(user);
+  return (
+    <div>
+      <Toast {...(toast||{})} />
+      <PageHeader title="Associados" subtitle="Cadastro e controle de mensalidades" />
+      <div style={{display:"flex",gap:0,marginBottom:24,borderBottom:`2px solid #e8e8e8`}}>
+        {[["lista","👥 Lista de Associados"],["cadastrar","➕ Novo Associado"],["mensalidades","💳 Mensalidades"],["inadimplentes","⚠️ Inadimplentes"]].map(([id,label])=>(
+          (!podeEditar && (id==="cadastrar")) ? null :
+          <button key={id} onClick={()=>setAba(id)}
+            style={{padding:"10px 20px",background:"transparent",border:"none",
+              borderBottom:`3px solid ${aba===id?C.dourado:"transparent"}`,
+              color:aba===id?C.azulEscuro:C.cinzaMedio,
+              fontWeight:aba===id?700:400,fontSize:13,cursor:"pointer",
+              marginBottom:-2,fontFamily:"inherit"}}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {aba==="lista"        && <ListaAssociados setAba={setAba} showToast={showToast} user={user} />}
+      {aba==="cadastrar"    && podeEditar && <CadastrarAssociado setAba={setAba} showToast={showToast} />}
+      {aba==="mensalidades" && <GerenciarMensalidades showToast={showToast} user={user} />}
+      {aba==="inadimplentes"&& <Inadimplentes showToast={showToast} />}
+    </div>
+  );
+}
+
+function ListaAssociados({ setAba, showToast, user }) {
+  const [lista, setLista]   = useState([]);
+  const [busca, setBusca]   = useState("");
+  const [status, setStatus] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [selecionado, setSelecionado] = useState(null);
+  const { podeEditar } = usePerfil(user);
+
+  async function load() {
+    setLoading(true);
+    try {
+      let q = "/associados?select=*&order=nome.asc";
+      if (status) q += `&status=eq.${status}`;
+      const r = await supa(q);
+      let rows = r || [];
+      if (busca) {
+        const b = busca.toLowerCase();
+        rows = rows.filter(a => a.nome?.toLowerCase().includes(b) || a.cpf?.includes(busca) || a.matricula?.includes(busca));
+      }
+      setLista(rows);
+    } catch(e) {
+      if (e.message?.includes("relation") || e.message?.includes("does not exist")) {
+        showToast("Execute o SQL de criação das tabelas no Supabase.", "error");
+      } else {
+        showToast("Erro ao carregar: " + e.message, "error");
+      }
+      setLista([]);
+    }
+    finally { setLoading(false); }
+  }
+
+  useEffect(() => { load(); }, [status]);
+
+  async function excluir(id) {
+    if (!confirm("Excluir este associado e todas as mensalidades?")) return;
+    try {
+      await supa(`/mensalidades?associado_id=eq.${id}`, {method:"DELETE", prefer:""});
+      await supa(`/associados?id=eq.${id}`, {method:"DELETE", prefer:""});
+      showToast("Associado excluído.");
+      setLista(l => l.filter(a => a.id !== id));
+      if (selecionado?.id === id) setSelecionado(null);
+    } catch(e) { showToast("Erro ao excluir.", "error"); }
+  }
+
+  const statusBadge = s => ({
+    ativo:    { bg:"#e6f7ec", cor:C.verde,    label:"Ativo" },
+    inativo:  { bg:"#f5f5f5", cor:C.cinzaMedio, label:"Inativo" },
+    suspenso: { bg:"#fff8e6", cor:C.dourado,  label:"Suspenso" },
+  }[s] || { bg:C.cinzaClaro, cor:C.cinzaMedio, label:s });
+
+  return (
+    <div style={{display:"grid", gridTemplateColumns: selecionado ? "1fr 380px" : "1fr", gap:20}}>
+      <div>
+        <Card style={{marginBottom:16}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 180px auto",gap:12,alignItems:"end"}}>
+            <Input label="Buscar por nome, CPF ou matrícula" value={busca} onChange={setBusca} placeholder="Buscar..." />
+            <Select label="Status" value={status} onChange={setStatus}
+              options={[{value:"",label:"Todos"},{value:"ativo",label:"Ativo"},{value:"inativo",label:"Inativo"},{value:"suspenso",label:"Suspenso"}]} />
+            <Btn onClick={load} disabled={loading} color={C.azulMedio}>🔍 Buscar</Btn>
+          </div>
+        </Card>
+        <Card>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+            <span style={{fontSize:13,color:C.cinzaMedio}}>{lista.length} associado(s)</span>
+            {podeEditar && <Btn small color={C.dourado} onClick={()=>setAba("cadastrar")}>➕ Novo Associado</Btn>}
+          </div>
+          {loading ? <div style={{textAlign:"center",padding:40,color:C.cinzaMedio}}>Carregando...</div>
+          : lista.length === 0 ? <div style={{textAlign:"center",padding:40,color:C.cinzaMedio}}>Nenhum associado encontrado.</div>
+          : <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+              <thead>
+                <tr style={{background:C.azulEscuro}}>
+                  {["Matrícula","Nome","CPF","Telefone","Plano","Status","Ações"].map(h=>(
+                    <th key={h} style={{padding:"9px 12px",textAlign:"left",color:C.branco,fontWeight:700,fontSize:11,letterSpacing:".05em"}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {lista.map((a,i)=>{
+                  const sb = statusBadge(a.status||"ativo");
+                  return (
+                    <tr key={a.id} style={{background: selecionado?.id===a.id?"#f0f6ff": i%2===0?C.branco:C.cinzaClaro, cursor:"pointer"}}
+                      onClick={()=>setSelecionado(selecionado?.id===a.id?null:a)}>
+                      <td style={{padding:"9px 12px",color:C.cinzaMedio,fontFamily:"monospace"}}>{a.matricula||"—"}</td>
+                      <td style={{padding:"9px 12px",fontWeight:600,color:C.azulEscuro}}>{a.nome}</td>
+                      <td style={{padding:"9px 12px",color:C.cinzaMedio}}>{a.cpf||"—"}</td>
+                      <td style={{padding:"9px 12px"}}>{a.telefone||"—"}</td>
+                      <td style={{padding:"9px 12px"}}>{a.plano||"—"}</td>
+                      <td style={{padding:"9px 12px"}}>
+                        <span style={{background:sb.bg,color:sb.cor,padding:"2px 8px",borderRadius:12,fontSize:11,fontWeight:700}}>{sb.label}</span>
+                      </td>
+                      <td style={{padding:"9px 12px"}} onClick={e=>e.stopPropagation()}>
+                        <div style={{display:"flex",gap:6}}>
+                          <Btn small outline color={C.azulMedio} onClick={()=>setSelecionado(selecionado?.id===a.id?null:a)}>Ver</Btn>
+                          {podeEditar && <Btn small outline color={C.vermelho} onClick={()=>excluir(a.id)}>🗑</Btn>}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          }
+        </Card>
+      </div>
+      {selecionado && <FichaAssociado associado={selecionado} onClose={()=>setSelecionado(null)} showToast={showToast} reload={load} user={user} />}
+    </div>
+  );
+}
+
+function FichaAssociado({ associado, onClose, showToast, reload, user }) {
+  const [mens, setMens]   = useState([]);
+  const [editando, setEditando] = useState(false);
+  const [f, setF]         = useState({...associado});
+  const [loading, setLoading] = useState(false);
+  const { podeEditar }    = usePerfil(user);
+  const set = k => v => setF(p=>({...p,[k]:v}));
+
+  async function loadMens() {
+    const r = await supa(`/mensalidades?associado_id=eq.${associado.id}&select=*&order=ano.desc,mes.desc&limit=24`);
+    setMens(r||[]);
+  }
+  useEffect(()=>{ loadMens(); },[associado.id]);
+
+  async function salvarEdicao() {
+    setLoading(true);
+    try {
+      await supa(`/associados?id=eq.${associado.id}`,{method:"PATCH",body:JSON.stringify(f)});
+      showToast("Associado atualizado!"); setEditando(false); reload();
+    } catch(e){showToast("Erro.","error");}
+    finally{setLoading(false);}
+  }
+
+  async function toggleMens(m) {
+    const novoPago = !m.pago;
+    try {
+      await supa(`/mensalidades?id=eq.${m.id}`,{method:"PATCH",body:JSON.stringify({pago:novoPago, data_pagamento: novoPago ? new Date().toISOString().split("T")[0] : null})});
+      loadMens(); showToast(novoPago?"Mensalidade paga!":"Marcado como pendente.");
+    } catch(e){showToast("Erro.","error");}
+  }
+
+  const meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+  const atrasadas = mens.filter(m=>!m.pago).length;
+
+  return (
+    <Card style={{position:"sticky",top:100}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <div>
+          <div style={{fontWeight:700,fontSize:15,color:C.azulEscuro}}>{associado.nome}</div>
+          <div style={{fontSize:11,color:C.cinzaMedio}}>Matrícula: {associado.matricula||"—"}</div>
+        </div>
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          {podeEditar && <Btn small outline color={C.azulMedio} onClick={()=>setEditando(!editando)}>{editando?"Cancelar":"✏️ Editar"}</Btn>}
+          <button onClick={onClose} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",color:C.cinzaMedio}}>✕</button>
+        </div>
+      </div>
+
+      {editando ? (
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <Input label="Nome" value={f.nome} onChange={set("nome")} />
+          <Input label="CPF" value={f.cpf||""} onChange={set("cpf")} />
+          <Input label="Telefone" value={f.telefone||""} onChange={set("telefone")} />
+          <Input label="E-mail" value={f.email||""} onChange={set("email")} />
+          <Input label="Plano" value={f.plano||""} onChange={set("plano")} />
+          <Input label="Valor Mensalidade (R$)" value={String(f.valor_mensalidade||"")} onChange={set("valor_mensalidade")} type="number" />
+          <Select label="Status" value={f.status||"ativo"} onChange={set("status")}
+            options={[{value:"ativo",label:"Ativo"},{value:"inativo",label:"Inativo"},{value:"suspenso",label:"Suspenso"}]} />
+          <Textarea label="Observações" value={f.observacoes||""} onChange={set("observacoes")} rows={2} />
+          <Btn onClick={salvarEdicao} disabled={loading} color={C.verde} full>{loading?"Salvando...":"💾 Salvar"}</Btn>
+        </div>
+      ) : (
+        <div style={{fontSize:13,lineHeight:2.0,color:C.cinzaEscuro}}>
+          {associado.cpf && <div><strong>CPF:</strong> {associado.cpf}</div>}
+          {associado.data_nascimento && <div><strong>Nascimento:</strong> {new Date(associado.data_nascimento+"T12:00:00").toLocaleDateString("pt-BR")}</div>}
+          {associado.telefone && <div><strong>Tel:</strong> {associado.telefone}</div>}
+          {associado.email && <div><strong>Email:</strong> {associado.email}</div>}
+          {associado.endereco && <div><strong>Endereço:</strong> {associado.endereco}</div>}
+          {associado.plano && <div><strong>Plano:</strong> {associado.plano}</div>}
+          {associado.valor_mensalidade && <div><strong>Mensalidade:</strong> R$ {Number(associado.valor_mensalidade).toLocaleString("pt-BR",{minimumFractionDigits:2})}</div>}
+          {associado.data_filiacao && <div><strong>Filiado em:</strong> {new Date(associado.data_filiacao+"T12:00:00").toLocaleDateString("pt-BR")}</div>}
+          {associado.observacoes && <div><strong>Obs:</strong> {associado.observacoes}</div>}
+        </div>
+      )}
+
+      <div style={{borderTop:`1px solid ${C.cinzaClaro}`,marginTop:16,paddingTop:16}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <span style={{fontSize:12,fontWeight:700,color:C.azulEscuro,textTransform:"uppercase",letterSpacing:".05em"}}>Mensalidades</span>
+          {atrasadas>0 && <span style={{background:"#fef0f0",color:C.vermelho,fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:12}}>{atrasadas} em atraso</span>}
+        </div>
+        {mens.length===0 ? <p style={{fontSize:12,color:C.cinzaMedio}}>Sem mensalidades geradas.</p>
+        : mens.map(m=>(
+          <div key={m.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderBottom:`1px solid ${C.cinzaClaro}`}}>
+            <span style={{fontSize:13,color:C.cinzaEscuro}}>{meses[(m.mes||1)-1]}/{m.ano}</span>
+            <span style={{fontSize:12,color:C.cinzaMedio}}>R$ {Number(m.valor||0).toLocaleString("pt-BR",{minimumFractionDigits:2})}</span>
+            {podeEditar ? (
+              <button onClick={()=>toggleMens(m)} style={{
+                background:m.pago?"#e6f7ec":"#fef0f0",
+                color:m.pago?C.verde:C.vermelho,
+                border:`1px solid ${m.pago?C.verde+"40":C.vermelho+"40"}`,
+                padding:"3px 10px",borderRadius:12,fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                {m.pago?"✓ Pago":"✗ Pendente"}
+              </button>
+            ) : (
+              <span style={{background:m.pago?"#e6f7ec":"#fef0f0",color:m.pago?C.verde:C.vermelho,
+                padding:"3px 10px",borderRadius:12,fontSize:11,fontWeight:700}}>
+                {m.pago?"✓ Pago":"✗ Pendente"}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function CadastrarAssociado({ setAba, showToast }) {
+  const empty = {nome:"",cpf:"",data_nascimento:"",telefone:"",email:"",endereco:"",bairro:"",cidade:"SC",estado:"SC",cep:"",plano:"",valor_mensalidade:"",data_filiacao:new Date().toISOString().split("T")[0],data_inicio_mensalidade:new Date().toISOString().split("T")[0].slice(0,7),status:"ativo",observacoes:""};
+  const [f, setF] = useState(empty);
+  const [loading, setLoading] = useState(false);
+  const set = k => v => setF(p=>({...p,[k]:v}));
+
+  function gerarMatricula() {
+    const ano = new Date().getFullYear().toString().slice(2);
+    const rand = Math.floor(Math.random()*9000+1000);
+    return `${ano}${rand}`;
+  }
+
+  async function salvar() {
+    if (!f.nome){showToast("Nome obrigatório.","error");return;}
+    setLoading(true);
+    try {
+      const matricula = gerarMatricula();
+      const assoc = await supa("/associados",{method:"POST",body:JSON.stringify({...f,matricula,valor_mensalidade:Number(f.valor_mensalidade)||0})});
+      const id = assoc[0].id;
+      // Gerar mensalidades desde data_inicio até hoje
+      if (f.valor_mensalidade && Number(f.valor_mensalidade) > 0 && f.data_inicio_mensalidade) {
+        const [anoIni, mesIni] = f.data_inicio_mensalidade.split("-").map(Number);
+        const hoje = new Date();
+        const anoFim = hoje.getFullYear();
+        const mesFim = hoje.getMonth() + 1;
+        let ano = anoIni, mes = mesIni;
+        const mensItems = [];
+        while (ano < anoFim || (ano === anoFim && mes <= mesFim)) {
+          mensItems.push({associado_id:id, mes, ano, valor:Number(f.valor_mensalidade), pago:false});
+          mes++;
+          if (mes > 12) { mes = 1; ano++; }
+          if (mensItems.length > 600) break; // segurança: max 50 anos
+        }
+        for (const m of mensItems) {
+          try { await supa("/mensalidades",{method:"POST",body:JSON.stringify(m)}); } catch(_){}
+        }
+      }
+      showToast("Associado cadastrado com matrícula "+matricula+"!");
+      setF(empty);
+      setTimeout(()=>setAba("lista"),1200);
+    } catch(e){showToast(e.message.includes("unique")?"CPF já cadastrado.":"Erro: "+e.message,"error");}
+    finally{setLoading(false);}
+  }
+
+  // Row2 removido — usa Grid2 global
+  // Row3 removido — usa Grid3 global
+
+  return (
+    <div>
+      <Card style={{marginBottom:20}}>
+        <SecaoTitulo icon="👤">Dados Pessoais</SecaoTitulo>
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
+          <Input label="Nome Completo *" value={f.nome} onChange={set("nome")} placeholder="Nome completo do associado" required />
+          <Grid2>
+            <Input label="CPF" value={f.cpf} onChange={set("cpf")} placeholder="000.000.000-00" />
+            <Input label="Data de Nascimento" value={f.data_nascimento} onChange={set("data_nascimento")} type="date" />
+          </Grid2>
+          <Grid2>
+            <Input label="Telefone / WhatsApp" value={f.telefone} onChange={set("telefone")} placeholder="(48) 99999-9999" />
+            <Input label="E-mail" value={f.email} onChange={set("email")} placeholder="email@exemplo.com" />
+          </Grid2>
+        </div>
+      </Card>
+
+      <Card style={{marginBottom:20}}>
+        <SecaoTitulo icon="📍">Endereço</SecaoTitulo>
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
+          <Input label="Endereço (Rua + Número)" value={f.endereco} onChange={set("endereco")} placeholder="Rua das Flores, 123" />
+          <Grid3>
+            <Input label="Bairro" value={f.bairro} onChange={set("bairro")} placeholder="Bairro" />
+            <Input label="Cidade" value={f.cidade} onChange={set("cidade")} placeholder="Cidade" />
+            <Input label="CEP" value={f.cep} onChange={set("cep")} placeholder="00000-000" />
+          </Grid3>
+        </div>
+      </Card>
+
+      <Card style={{marginBottom:20}}>
+        <SecaoTitulo icon="💳">Filiação e Mensalidade</SecaoTitulo>
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
+          <Grid2>
+            <Input label="Plano / Categoria" value={f.plano} onChange={set("plano")} placeholder="Ex: Titular, Dependente..." />
+            <Input label="Valor Mensalidade (R$)" value={f.valor_mensalidade} onChange={set("valor_mensalidade")} placeholder="0,00" type="number" />
+          </Grid2>
+          <Grid2>
+            <Input label="Data de Filiação" value={f.data_filiacao} onChange={set("data_filiacao")} type="date" />
+            <div>
+              <label style={{display:"block",fontSize:12,fontWeight:600,color:"#333333",marginBottom:4}}>
+                Gerar mensalidades a partir de <span style={{color:"#c0392b"}}>*</span>
+              </label>
+              <input type="month" value={f.data_inicio_mensalidade} onChange={e=>set("data_inicio_mensalidade")(e.target.value)}
+                style={{border:"1.5px solid #ddd",borderRadius:5,padding:"10px 12px",fontSize:13,
+                  width:"100%",boxSizing:"border-box",fontFamily:"inherit",outline:"none"}} />
+              <span style={{fontSize:11,color:"#666666",marginTop:3,display:"block"}}>
+                Ex: 2015-01 para gerar desde Jan/2015 até hoje
+              </span>
+            </div>
+          </Grid2>
+          <Select label="Status" value={f.status} onChange={set("status")}
+            options={[{value:"ativo",label:"✅ Ativo"},{value:"inativo",label:"⏸ Inativo"},{value:"suspenso",label:"⚠️ Suspenso"}]} />
+          <Textarea label="Observações" value={f.observacoes} onChange={set("observacoes")} placeholder="Informações adicionais..." rows={3} />
+        </div>
+      </Card>
+
+      <div style={{display:"flex",gap:12}}>
+        <Btn onClick={salvar} disabled={loading} color={C.dourado}>👤 {loading?"Salvando...":"Cadastrar Associado"}</Btn>
+        <Btn outline color={C.cinzaMedio} onClick={()=>setAba("lista")}>Cancelar</Btn>
+      </div>
+    </div>
+  );
+}
+
+function GerenciarMensalidades({ showToast, user }) {
+  const [associados, setAssociados] = useState([]);
+  const [selId, setSelId]           = useState("");
+  const [mens, setMens]             = useState([]);
+  const [novaForm, setNovaForm]     = useState({mes: new Date().getMonth()+1, ano: new Date().getFullYear(), valor:"", pago:false});
+  const [loading, setLoading]       = useState(false);
+  const { podeEditar }              = usePerfil(user);
+
+  useEffect(()=>{ supa("/associados?select=id,nome,matricula,valor_mensalidade&order=nome.asc&status=eq.ativo").then(r=>setAssociados(r||[])).catch(()=>{}); },[]);
+
+  async function loadMens(id) {
+    const r = await supa(`/mensalidades?associado_id=eq.${id}&select=*&order=ano.desc,mes.desc`);
+    setMens(r||[]);
+  }
+
+  async function toggle(m) {
+    await supa(`/mensalidades?id=eq.${m.id}`,{method:"PATCH",body:JSON.stringify({pago:!m.pago, data_pagamento:!m.pago?new Date().toISOString().split("T")[0]:null})});
+    loadMens(selId); showToast(!m.pago?"Pago!":"Desmarcado.");
+  }
+
+  async function adicionarMens() {
+    if(!selId||!novaForm.valor){showToast("Selecione associado e informe o valor.","error");return;}
+    setLoading(true);
+    try {
+      await supa("/mensalidades",{method:"POST",body:JSON.stringify({associado_id:Number(selId),mes:Number(novaForm.mes),ano:Number(novaForm.ano),valor:Number(novaForm.valor),pago:novaForm.pago})});
+      showToast("Mensalidade adicionada!"); loadMens(selId);
+    } catch(e){showToast("Erro (já pode existir esse mês).","error");}
+    finally{setLoading(false);}
+  }
+
+  async function gerarAno() {
+    const assoc = associados.find(a=>String(a.id)===String(selId));
+    if(!assoc||!assoc.valor_mensalidade){showToast("Associado sem valor de mensalidade definido.","error");return;}
+    if(!confirm(`Gerar 12 mensalidades de R$ ${assoc.valor_mensalidade} para ${assoc.nome}?`)) return;
+    setLoading(true);
+    try {
+      const ano = new Date().getFullYear();
+      for(let m=1;m<=12;m++){
+        try { await supa("/mensalidades",{method:"POST",body:JSON.stringify({associado_id:assoc.id,mes:m,ano,valor:Number(assoc.valor_mensalidade),pago:false})}); } catch(_){}
+      }
+      showToast("12 mensalidades geradas!"); loadMens(selId);
+    } finally{setLoading(false);}
+  }
+
+  const meses=["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+  const totalPago = mens.filter(m=>m.pago).reduce((s,m)=>s+Number(m.valor||0),0);
+  const totalPendente = mens.filter(m=>!m.pago).reduce((s,m)=>s+Number(m.valor||0),0);
+  const fmt = v => v.toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"300px 1fr",gap:20,alignItems:"start"}}>
+      <div style={{display:"flex",flexDirection:"column",gap:16}}>
+        <Card>
+          <SecaoTitulo icon="👤">Selecionar Associado</SecaoTitulo>
+          <Select label="" value={selId} onChange={v=>{setSelId(v);if(v)loadMens(v);}}
+            options={[{value:"",label:"Selecione..."},...associados.map(a=>({value:String(a.id),label:a.nome+(a.matricula?` (${a.matricula})`:"")}))]} />
+        </Card>
+        {selId && podeEditar && (
+          <Card>
+            <SecaoTitulo icon="➕">Adicionar Mensalidade</SecaoTitulo>
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <Select label="Mês" value={String(novaForm.mes)} onChange={v=>setNovaForm(p=>({...p,mes:Number(v)}))}
+                  options={meses.map((m,i)=>({value:String(i+1),label:m}))} />
+                <Input label="Ano" value={String(novaForm.ano)} onChange={v=>setNovaForm(p=>({...p,ano:Number(v)}))} type="number" />
+              </div>
+              <Input label="Valor (R$)" value={novaForm.valor} onChange={v=>setNovaForm(p=>({...p,valor:v}))} placeholder="0,00" type="number" />
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <input type="checkbox" id="jaPago" checked={novaForm.pago} onChange={e=>setNovaForm(p=>({...p,pago:e.target.checked}))} style={{width:15,height:15}} />
+                <label htmlFor="jaPago" style={{fontSize:13,cursor:"pointer"}}>Marcar como já pago</label>
+              </div>
+              <Btn onClick={adicionarMens} disabled={loading} small color={C.azulMedio}>➕ Adicionar</Btn>
+              <Btn onClick={gerarAno} disabled={loading} small outline color={C.verde}>📅 Gerar Ano Completo</Btn>
+            </div>
+          </Card>
+        )}
+        {selId && mens.length>0 && (
+          <Card>
+            <SecaoTitulo icon="📊">Resumo</SecaoTitulo>
+            <div style={{fontSize:13,lineHeight:2}}>
+              <div style={{display:"flex",justifyContent:"space-between"}}><span>Total pago:</span><span style={{color:C.verde,fontWeight:700}}>{fmt(totalPago)}</span></div>
+              <div style={{display:"flex",justifyContent:"space-between"}}><span>Total pendente:</span><span style={{color:C.vermelho,fontWeight:700}}>{fmt(totalPendente)}</span></div>
+              <div style={{display:"flex",justifyContent:"space-between",borderTop:`1px solid ${C.cinzaClaro}`,paddingTop:6}}><span>Total:</span><span style={{fontWeight:700}}>{fmt(totalPago+totalPendente)}</span></div>
+            </div>
+          </Card>
+        )}
+      </div>
+
+      <Card>
+        <SecaoTitulo icon="💳">Histórico de Mensalidades</SecaoTitulo>
+        {!selId ? <div style={{textAlign:"center",padding:"40px 0",color:C.cinzaMedio}}>Selecione um associado ao lado.</div>
+        : mens.length===0 ? <div style={{textAlign:"center",padding:"40px 0",color:C.cinzaMedio}}>Nenhuma mensalidade encontrada.</div>
+        : <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+            <thead>
+              <tr style={{background:C.azulEscuro}}>
+                {["Mês/Ano","Valor","Status","Pagamento",podeEditar?"Ação":""].map(h=>(
+                  <th key={h} style={{padding:"9px 12px",textAlign:"left",color:C.branco,fontWeight:700,fontSize:11}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {mens.map((m,i)=>(
+                <tr key={m.id} style={{background:i%2===0?C.branco:C.cinzaClaro}}>
+                  <td style={{padding:"8px 12px",fontWeight:600}}>{meses[(m.mes||1)-1]}/{m.ano}</td>
+                  <td style={{padding:"8px 12px"}}>R$ {Number(m.valor||0).toLocaleString("pt-BR",{minimumFractionDigits:2})}</td>
+                  <td style={{padding:"8px 12px"}}>
+                    <span style={{background:m.pago?"#e6f7ec":"#fef0f0",color:m.pago?C.verde:C.vermelho,
+                      padding:"2px 10px",borderRadius:12,fontSize:11,fontWeight:700}}>
+                      {m.pago?"✓ Pago":"✗ Pendente"}
+                    </span>
+                  </td>
+                  <td style={{padding:"8px 12px",color:C.cinzaMedio,fontSize:12}}>
+                    {m.data_pagamento?new Date(m.data_pagamento+"T12:00:00").toLocaleDateString("pt-BR"):"—"}
+                  </td>
+                  {podeEditar && (
+                    <td style={{padding:"8px 12px"}}>
+                      <Btn small outline color={m.pago?C.cinzaMedio:C.verde} onClick={()=>toggle(m)}>
+                        {m.pago?"Desmarcar":"✓ Pagar"}
+                      </Btn>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        }
+      </Card>
+    </div>
+  );
+}
+
+function Inadimplentes({ showToast }) {
+  const [lista, setLista] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [mesRef, setMesRef] = useState(new Date().getMonth()+1);
+  const [anoRef, setAnoRef] = useState(new Date().getFullYear());
+  const meses=["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+
+  async function load() {
+    setLoading(true);
+    try {
+      // Buscar todas as mensalidades não pagas até o mês de referência
+      const r = await supa(`/mensalidades?pago=eq.false&select=*,associados(id,nome,matricula,telefone,email,status)&order=ano.asc,mes.asc`);
+      const rows = (r||[]).filter(m => {
+        if(m.associados?.status === "inativo") return false;
+        if(m.ano < anoRef) return true;
+        if(m.ano === anoRef && m.mes <= mesRef) return true;
+        return false;
+      });
+      // Agrupar por associado
+      const porAssoc = {};
+      rows.forEach(m => {
+        const id = m.associados?.id;
+        if(!id) return;
+        if(!porAssoc[id]) porAssoc[id] = { assoc: m.associados, mens: [], total: 0 };
+        porAssoc[id].mens.push(m);
+        porAssoc[id].total += Number(m.valor||0);
+      });
+      setLista(Object.values(porAssoc).sort((a,b)=>b.mens.length-a.mens.length));
+    } catch(e){ showToast("Erro.","error"); }
+    finally{ setLoading(false); }
+  }
+
+  useEffect(()=>{ load(); },[mesRef, anoRef]);
+
+  const fmt = v => v.toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+  const totalGeral = lista.reduce((s,x)=>s+x.total,0);
+
+  return (
+    <div>
+      <Card style={{marginBottom:20}}>
+        <div style={{display:"flex",alignItems:"center",gap:16,flexWrap:"wrap"}}>
+          <span style={{fontSize:13,fontWeight:600,color:C.azulEscuro}}>Referência até:</span>
+          <Select label="" value={String(mesRef)} onChange={v=>setMesRef(Number(v))}
+            options={meses.map((m,i)=>({value:String(i+1),label:m}))} />
+          <Input label="" value={String(anoRef)} onChange={v=>setAnoRef(Number(v))} type="number" />
+          <Btn small color={C.azulMedio} onClick={load}>🔍 Atualizar</Btn>
+          <div style={{marginLeft:"auto",display:"flex",gap:24,fontSize:13}}>
+            <div><span style={{color:C.cinzaMedio}}>Inadimplentes: </span><strong style={{color:C.vermelho}}>{lista.length}</strong></div>
+            <div><span style={{color:C.cinzaMedio}}>Total em atraso: </span><strong style={{color:C.vermelho}}>{fmt(totalGeral)}</strong></div>
+          </div>
+        </div>
+      </Card>
+
+      {loading ? <div style={{textAlign:"center",padding:60,color:C.cinzaMedio}}>Carregando...</div>
+      : lista.length===0 ? (
+        <Card>
+          <div style={{textAlign:"center",padding:"60px 0"}}>
+            <div style={{fontSize:48,marginBottom:12}}>🎉</div>
+            <div style={{fontSize:16,fontWeight:700,color:C.verde}}>Nenhum inadimplente!</div>
+            <div style={{fontSize:13,color:C.cinzaMedio,marginTop:8}}>Todos os associados estão em dia até {meses[mesRef-1]}/{anoRef}.</div>
+          </div>
+        </Card>
+      ) : (
+        <Card>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+            <thead>
+              <tr style={{background:C.vermelho}}>
+                {["Matrícula","Associado","Telefone","Meses em Atraso","Total Devido","Parcelas"].map(h=>(
+                  <th key={h} style={{padding:"10px 12px",textAlign:"left",color:C.branco,fontWeight:700,fontSize:11}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {lista.map((x,i)=>(
+                <tr key={x.assoc.id} style={{background:i%2===0?C.branco:"#fff5f5"}}>
+                  <td style={{padding:"9px 12px",fontFamily:"monospace",color:C.cinzaMedio}}>{x.assoc.matricula||"—"}</td>
+                  <td style={{padding:"9px 12px",fontWeight:700,color:C.azulEscuro}}>{x.assoc.nome}</td>
+                  <td style={{padding:"9px 12px"}}>{x.assoc.telefone||"—"}</td>
+                  <td style={{padding:"9px 12px"}}>
+                    <span style={{background:"#fef0f0",color:C.vermelho,padding:"2px 10px",borderRadius:12,fontWeight:700}}>
+                      {x.mens.length} {x.mens.length===1?"mês":"meses"}
+                    </span>
+                  </td>
+                  <td style={{padding:"9px 12px",fontWeight:700,color:C.vermelho}}>{fmt(x.total)}</td>
+                  <td style={{padding:"9px 12px",fontSize:11,color:C.cinzaMedio}}>
+                    {x.mens.map(m=>`${meses[m.mes-1]}/${m.ano}`).join(", ")}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+
+// ─── EDITOR DO SITE ──────────────────────────────────────────────────────────
+
+function EditorSite() {
+  const [aba, setAba] = useState("noticias");
+  const [toast, showToast] = useToast();
+
+  const abas = [
+    { id:"noticias",       icon:"📰", label:"Notícias" },
+    { id:"membros",        icon:"👥", label:"Diretoria / Conselhos" },
+    { id:"institucional",  icon:"🏛", label:"Textos Institucionais" },
+    { id:"causas",         icon:"🤝", label:"Causas" },
+    { id:"parceiros",      icon:"🏢", label:"Parceiros" },
+    { id:"contato",        icon:"📞", label:"Dados de Contato" },
+    { id:"galeria",        icon:"🖼", label:"Galeria de Imagens" },
+  ];
+
+  return (
+    <div>
+      <Toast {...(toast||{})} />
+      <PageHeader title="Editor do Site" subtitle="Gerencie todo o conteúdo do site público" />
+
+      {/* Abas horizontais */}
+      <div style={{display:"flex",gap:0,marginBottom:24,borderBottom:`2px solid #e8e8e8`,flexWrap:"wrap"}}>
+        {abas.map(a=>(
+          <button key={a.id} onClick={()=>setAba(a.id)}
+            style={{padding:"10px 16px",background:"transparent",border:"none",
+              borderBottom:`3px solid ${aba===a.id?C.dourado:"transparent"}`,
+              color:aba===a.id?C.azulEscuro:C.cinzaMedio,
+              fontWeight:aba===a.id?700:400,fontSize:13,cursor:"pointer",
+              marginBottom:-2,fontFamily:"inherit",display:"flex",alignItems:"center",gap:6}}>
+            {a.icon} {a.label}
+          </button>
+        ))}
+      </div>
+
+      {aba==="noticias"      && <EditorNoticias showToast={showToast} />}
+      {aba==="membros"       && <EditorMembros showToast={showToast} />}
+      {aba==="institucional" && <EditorInstitucional showToast={showToast} />}
+      {aba==="causas"        && <EditorCausas showToast={showToast} />}
+      {aba==="parceiros"     && <EditorParceiros showToast={showToast} />}
+      {aba==="contato"       && <EditorContato showToast={showToast} />}
+      {aba==="galeria"       && <EditorGaleria showToast={showToast} />}
+    </div>
+  );
+}
+
+// ── Editor Notícias ──────────────────────────────────────────────────────────
+
+function EditorNoticias({ showToast }) {
+  const emptyForm = { titulo:"", resumo:"", conteudo:"", imagem_url:"", categoria:"", data_publicacao: new Date().toISOString().split("T")[0], destaque: false };
+  const [lista, setLista]   = useState([]);
+  const [form, setForm]     = useState(emptyForm);
+  const [editId, setEditId] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const set = k => v => setForm(p=>({...p,[k]:v}));
+
+  async function load() {
+    const r = await supa("/site_noticias?select=*&order=data_publicacao.desc");
+    setLista(r||[]);
+  }
+  useEffect(()=>{ load(); },[]);
+
+  async function salvar() {
+    if(!form.titulo||!form.resumo){showToast("Título e resumo obrigatórios.","error");return;}
+    setLoading(true);
+    try {
+      if(editId) {
+        await supa(`/site_noticias?id=eq.${editId}`,{method:"PATCH",body:JSON.stringify(form)});
+        showToast("Notícia atualizada!");
+      } else {
+        await supa("/site_noticias",{method:"POST",body:JSON.stringify(form)});
+        showToast("Notícia publicada!");
+      }
+      setForm(emptyForm); setEditId(null); load();
+    } catch(e){showToast("Erro: "+e.message,"error");}
+    finally{setLoading(false);}
+  }
+
+  function editar(n) { setForm({titulo:n.titulo,resumo:n.resumo,conteudo:n.conteudo||"",imagem_url:n.imagem_url||"",categoria:n.categoria||"",data_publicacao:n.data_publicacao,destaque:n.destaque||false}); setEditId(n.id); }
+
+  async function excluir(id) {
+    if(!confirm("Excluir esta notícia?")) return;
+    await supa(`/site_noticias?id=eq.${id}`,{method:"DELETE",prefer:""});
+    showToast("Notícia excluída."); load();
+  }
+
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1.4fr",gap:24,alignItems:"start"}}>
+      {/* Formulário */}
+      <Card>
+        <SecaoTitulo icon="📰">{editId?"Editar Notícia":"Nova Notícia"}</SecaoTitulo>
+        <div style={{display:"flex",flexDirection:"column",gap:13}}>
+          <Input label="Título *" value={form.titulo} onChange={set("titulo")} placeholder="Título da notícia" required />
+          <Input label="Categoria" value={form.categoria} onChange={set("categoria")} placeholder="Ex: Educação, Saúde..." />
+          <Input label="Data de Publicação" value={form.data_publicacao} onChange={set("data_publicacao")} type="date" />
+          <Input label="URL da Imagem" value={form.imagem_url} onChange={set("imagem_url")} placeholder="https://..." />
+          {form.imagem_url && (
+            <img src={form.imagem_url} alt="preview" onError={e=>e.target.style.display="none"}
+              style={{width:"100%",height:120,objectFit:"cover",borderRadius:6,border:`1px solid ${C.cinzaClaro}`}} />
+          )}
+          <Textarea label="Resumo *" value={form.resumo} onChange={set("resumo")} placeholder="Texto curto exibido na listagem..." rows={3} />
+          <Textarea label="Conteúdo completo" value={form.conteudo} onChange={set("conteudo")} placeholder="Texto completo da notícia (suporta HTML básico)..." rows={6} />
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <input type="checkbox" id="destaque" checked={form.destaque} onChange={e=>set("destaque")(e.target.checked)}
+              style={{width:16,height:16,cursor:"pointer"}} />
+            <label htmlFor="destaque" style={{fontSize:13,fontWeight:600,color:C.cinzaEscuro,cursor:"pointer"}}>Notícia em destaque (aparece no topo)</label>
+          </div>
+          <div style={{display:"flex",gap:10,paddingTop:4}}>
+            <Btn onClick={salvar} disabled={loading} color={C.azulMedio}>
+              {loading?"Salvando...":editId?"💾 Salvar Edição":"📰 Publicar"}
+            </Btn>
+            {editId && <Btn outline color={C.cinzaMedio} onClick={()=>{setForm(emptyForm);setEditId(null);}}>Cancelar</Btn>}
+          </div>
+        </div>
+      </Card>
+
+      {/* Lista */}
+      <Card>
+        <SecaoTitulo icon="📋">Notícias Publicadas ({lista.length})</SecaoTitulo>
+        {lista.length===0 ? <p style={{color:C.cinzaMedio,fontSize:13}}>Nenhuma notícia.</p>
+          : lista.map((n,i)=>(
+            <div key={n.id} style={{padding:"12px 0",borderBottom:`1px solid ${C.cinzaClaro}`,display:"flex",gap:12,alignItems:"flex-start"}}>
+              {n.imagem_url && <img src={n.imagem_url} alt="" onError={e=>e.target.style.display="none"} style={{width:60,height:50,objectFit:"cover",borderRadius:5,flexShrink:0}} />}
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:3,flexWrap:"wrap"}}>
+                  {n.destaque && <span style={{background:C.dourado,color:C.branco,fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:4}}>DESTAQUE</span>}
+                  {n.categoria && <span style={{background:C.cinzaClaro,color:C.cinzaMedio,fontSize:10,padding:"1px 6px",borderRadius:4}}>{n.categoria}</span>}
+                  <span style={{fontSize:11,color:C.cinzaMedio}}>{n.data_publicacao?new Date(n.data_publicacao+"T12:00:00").toLocaleDateString("pt-BR"):""}</span>
+                </div>
+                <div style={{fontWeight:700,fontSize:13,color:C.azulEscuro,lineHeight:1.3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.titulo}</div>
+                <div style={{fontSize:12,color:C.cinzaMedio,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{n.resumo}</div>
+              </div>
+              <div style={{display:"flex",gap:6,flexShrink:0}}>
+                <Btn small outline color={C.azulMedio} onClick={()=>editar(n)}>✏️</Btn>
+                <Btn small outline color={C.vermelho} onClick={()=>excluir(n.id)}>🗑</Btn>
+              </div>
+            </div>
+          ))}
+      </Card>
+    </div>
+  );
+}
+
+// ── Editor Membros ───────────────────────────────────────────────────────────
+
+function EditorMembros({ showToast }) {
+  const emptyForm = { nome:"", cargo:"", grupo:"diretoria_executiva", descricao:"", foto_url:"", ordem: 0 };
+  const [lista, setLista]   = useState([]);
+  const [form, setForm]     = useState(emptyForm);
+  const [editId, setEditId] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const set = k => v => setForm(p=>({...p,[k]:v}));
+
+  const GRUPOS = [
+    {value:"diretoria_executiva", label:"Diretoria Executiva"},
+    {value:"conselho_curador",    label:"Conselho Curador"},
+    {value:"conselho_fiscal",     label:"Conselho Fiscal"},
+  ];
+
+  async function load() { const r=await supa("/site_membros?select=*&order=grupo.asc,ordem.asc"); setLista(r||[]); }
+  useEffect(()=>{load();},[]);
+
+  async function salvar() {
+    if(!form.nome||!form.cargo){showToast("Nome e cargo obrigatórios.","error");return;}
+    setLoading(true);
+    try {
+      const payload = {...form, ordem: Number(form.ordem)||0};
+      if(editId) { await supa(`/site_membros?id=eq.${editId}`,{method:"PATCH",body:JSON.stringify(payload)}); showToast("Membro atualizado!"); }
+      else        { await supa("/site_membros",{method:"POST",body:JSON.stringify(payload)}); showToast("Membro adicionado!"); }
+      setForm(emptyForm); setEditId(null); load();
+    } catch(e){showToast("Erro.","error");}
+    finally{setLoading(false);}
+  }
+
+  function editar(m) { setForm({nome:m.nome,cargo:m.cargo,grupo:m.grupo,descricao:m.descricao||"",foto_url:m.foto_url||"",ordem:m.ordem||0}); setEditId(m.id); }
+
+  async function excluir(id) {
+    if(!confirm("Excluir membro?")) return;
+    await supa(`/site_membros?id=eq.${id}`,{method:"DELETE",prefer:""});
+    showToast("Excluído."); load();
+  }
+
+  const grupoLabel = v => GRUPOS.find(g=>g.value===v)?.label || v;
+  const porGrupo = GRUPOS.map(g=>({...g, membros: lista.filter(m=>m.grupo===g.value)}));
+
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1.4fr",gap:24,alignItems:"start"}}>
+      <Card>
+        <SecaoTitulo icon="👥">{editId?"Editar Membro":"Novo Membro"}</SecaoTitulo>
+        <div style={{display:"flex",flexDirection:"column",gap:13}}>
+          <Select label="Grupo" value={form.grupo} onChange={set("grupo")} options={GRUPOS} />
+          <Input label="Nome *" value={form.nome} onChange={set("nome")} placeholder="Nome completo" required />
+          <Input label="Cargo *" value={form.cargo} onChange={set("cargo")} placeholder="Ex: Presidente, Conselheiro..." required />
+          <Input label="URL da Foto" value={form.foto_url} onChange={set("foto_url")} placeholder="https://..." />
+          {form.foto_url && <img src={form.foto_url} alt="preview" onError={e=>e.target.style.display="none"} style={{width:80,height:80,objectFit:"cover",borderRadius:"50%",border:`3px solid ${C.dourado}`}} />}
+          <Textarea label="Descrição / Bio" value={form.descricao} onChange={set("descricao")} placeholder="Formação, cargo, área de atuação..." rows={3} />
+          <Input label="Ordem de exibição" value={String(form.ordem)} onChange={v=>set("ordem")(Number(v)||0)} type="number" placeholder="0" />
+          <div style={{display:"flex",gap:10}}>
+            <Btn onClick={salvar} disabled={loading} color={C.azulMedio}>{loading?"Salvando...":editId?"💾 Salvar":"➕ Adicionar"}</Btn>
+            {editId && <Btn outline color={C.cinzaMedio} onClick={()=>{setForm(emptyForm);setEditId(null);}}>Cancelar</Btn>}
+          </div>
+        </div>
+      </Card>
+
+      <div style={{display:"flex",flexDirection:"column",gap:16}}>
+        {porGrupo.map(g=>(
+          <Card key={g.value}>
+            <SecaoTitulo icon="👥">{g.label} ({g.membros.length})</SecaoTitulo>
+            {g.membros.length===0 ? <p style={{color:C.cinzaMedio,fontSize:13}}>Nenhum membro.</p>
+              : g.membros.map(m=>(
+                <div key={m.id} style={{display:"flex",gap:12,alignItems:"center",padding:"10px 0",borderBottom:`1px solid ${C.cinzaClaro}`}}>
+                  <div style={{width:44,height:44,borderRadius:"50%",background:C.cinzaClaro,flexShrink:0,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>
+                    {m.foto_url ? <img src={m.foto_url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={e=>e.target.style.display="none"} /> : "👤"}
+                  </div>
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:700,fontSize:13,color:C.azulEscuro}}>{m.nome}</div>
+                    <div style={{fontSize:12,color:C.dourado,fontWeight:600}}>{m.cargo}</div>
+                  </div>
+                  <div style={{display:"flex",gap:6}}>
+                    <Btn small outline color={C.azulMedio} onClick={()=>editar(m)}>✏️</Btn>
+                    <Btn small outline color={C.vermelho} onClick={()=>excluir(m.id)}>🗑</Btn>
+                  </div>
+                </div>
+              ))}
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Editor Institucional ─────────────────────────────────────────────────────
+
+function EditorInstitucional({ showToast }) {
+  const CAMPOS = [
+    { key:"historia",   label:"Nossa História",   rows:6 },
+    { key:"missao",     label:"Missão",            rows:4 },
+    { key:"visao",      label:"Visão",             rows:4 },
+    { key:"valores",    label:"Valores",           rows:5 },
+    { key:"sobre_hero", label:"Texto do Banner Principal (hero)", rows:3 },
+    { key:"timeline",   label:"Linha do Tempo (um item por linha: ANO|Descrição)", rows:8 },
+  ];
+  const [dados, setDados]   = useState({});
+  const [saving, setSaving] = useState(false);
+
+  async function load() {
+    try {
+      const r = await supa("/site_institucional?select=chave,valor");
+      const obj = {}; (r||[]).forEach(x=>{obj[x.chave]=x.valor;}); setDados(obj);
+    } catch(_){}
+  }
+  useEffect(()=>{load();},[]);
+
+  async function salvarTudo() {
+    setSaving(true);
+    try {
+      for(const [chave, valor] of Object.entries(dados)) {
+        await supa("/site_institucional", {
+          method:"POST",
+          prefer:"resolution=merge-duplicates",
+          headers:{"Prefer":"resolution=merge-duplicates,return=representation"},
+          body:JSON.stringify({chave, valor}),
+        });
+      }
+      showToast("Textos institucionais salvos!");
+    } catch(e){showToast("Erro: "+e.message,"error");}
+    finally{setSaving(false);}
+  }
+
+  return (
+    <Card>
+      <SecaoTitulo icon="🏛">Textos Institucionais</SecaoTitulo>
+      <div style={{display:"flex",flexDirection:"column",gap:20}}>
+        {CAMPOS.map(c=>(
+          <div key={c.key}>
+            <label style={{display:"block",fontSize:12,fontWeight:700,color:C.azulEscuro,marginBottom:6,textTransform:"uppercase",letterSpacing:".05em"}}>{c.label}</label>
+            <textarea value={dados[c.key]||""} onChange={e=>setDados(p=>({...p,[c.key]:e.target.value}))}
+              rows={c.rows} placeholder={`Digite o conteúdo de "${c.label}"...`}
+              style={{width:"100%",border:`1.5px solid #ddd`,borderRadius:6,padding:"10px 12px",
+                fontSize:13,fontFamily:"inherit",resize:"vertical",outline:"none",boxSizing:"border-box"}} />
+          </div>
+        ))}
+        <div><Btn onClick={salvarTudo} disabled={saving} color={C.azulMedio}>{saving?"Salvando...":"💾 Salvar Todos os Textos"}</Btn></div>
+      </div>
+    </Card>
+  );
+}
+
+// ── Editor Causas ────────────────────────────────────────────────────────────
+
+function EditorCausas({ showToast }) {
+  const emptyForm = { titulo:"", descricao:"", imagem_url:"", meta_valor: 0, arrecadado: 0, ativo: true };
+  const [lista, setLista]   = useState([]);
+  const [form, setForm]     = useState(emptyForm);
+  const [editId, setEditId] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const set = k => v => setForm(p=>({...p,[k]:v}));
+
+  async function load() { const r=await supa("/site_causas?select=*&order=id.asc"); setLista(r||[]); }
+  useEffect(()=>{load();},[]);
+
+  async function salvar() {
+    if(!form.titulo||!form.descricao){showToast("Título e descrição obrigatórios.","error");return;}
+    setLoading(true);
+    try {
+      const payload = {...form, meta_valor:Number(form.meta_valor)||0, arrecadado:Number(form.arrecadado)||0};
+      if(editId) { await supa(`/site_causas?id=eq.${editId}`,{method:"PATCH",body:JSON.stringify(payload)}); showToast("Causa atualizada!"); }
+      else        { await supa("/site_causas",{method:"POST",body:JSON.stringify(payload)}); showToast("Causa adicionada!"); }
+      setForm(emptyForm); setEditId(null); load();
+    } catch(e){showToast("Erro.","error");}
+    finally{setLoading(false);}
+  }
+
+  function editar(c) { setForm({titulo:c.titulo,descricao:c.descricao,imagem_url:c.imagem_url||"",meta_valor:c.meta_valor||0,arrecadado:c.arrecadado||0,ativo:c.ativo!==false}); setEditId(c.id); }
+
+  async function excluir(id) {
+    if(!confirm("Excluir causa?")) return;
+    await supa(`/site_causas?id=eq.${id}`,{method:"DELETE",prefer:""}); showToast("Excluído."); load();
+  }
+
+  const pct = c => c.meta_valor > 0 ? Math.min(Math.round((c.arrecadado/c.meta_valor)*100),100) : 0;
+
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1.4fr",gap:24,alignItems:"start"}}>
+      <Card>
+        <SecaoTitulo icon="🤝">{editId?"Editar Causa":"Nova Causa"}</SecaoTitulo>
+        <div style={{display:"flex",flexDirection:"column",gap:13}}>
+          <Input label="Título *" value={form.titulo} onChange={set("titulo")} placeholder="Ex: Educação Infantil" required />
+          <Input label="URL da Imagem" value={form.imagem_url} onChange={set("imagem_url")} placeholder="https://..." />
+          {form.imagem_url && <img src={form.imagem_url} alt="" onError={e=>e.target.style.display="none"} style={{width:"100%",height:100,objectFit:"cover",borderRadius:6}} />}
+          <Textarea label="Descrição *" value={form.descricao} onChange={set("descricao")} placeholder="Descreva a causa..." rows={4} />
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <Input label="Meta (R$)" value={String(form.meta_valor)} onChange={v=>set("meta_valor")(v)} placeholder="0" type="number" />
+            <Input label="Arrecadado (R$)" value={String(form.arrecadado)} onChange={v=>set("arrecadado")(v)} placeholder="0" type="number" />
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <input type="checkbox" id="causat" checked={form.ativo} onChange={e=>set("ativo")(e.target.checked)} style={{width:16,height:16,cursor:"pointer"}} />
+            <label htmlFor="causat" style={{fontSize:13,fontWeight:600,cursor:"pointer"}}>Causa ativa (visível no site)</label>
+          </div>
+          <div style={{display:"flex",gap:10}}>
+            <Btn onClick={salvar} disabled={loading} color={C.azulMedio}>{loading?"Salvando...":editId?"💾 Salvar":"➕ Adicionar"}</Btn>
+            {editId && <Btn outline color={C.cinzaMedio} onClick={()=>{setForm(emptyForm);setEditId(null);}}>Cancelar</Btn>}
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <SecaoTitulo icon="📋">Causas ({lista.length})</SecaoTitulo>
+        {lista.length===0 ? <p style={{color:C.cinzaMedio,fontSize:13}}>Nenhuma causa.</p>
+          : lista.map(c=>(
+            <div key={c.id} style={{padding:"12px 0",borderBottom:`1px solid ${C.cinzaClaro}`}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                <div style={{flex:1}}>
+                  <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:4}}>
+                    <span style={{fontWeight:700,fontSize:13,color:C.azulEscuro}}>{c.titulo}</span>
+                    {!c.ativo && <span style={{background:"#fef0f0",color:C.vermelho,fontSize:10,padding:"1px 6px",borderRadius:4}}>INATIVO</span>}
+                  </div>
+                  <div style={{fontSize:12,color:C.cinzaMedio,marginBottom:6,lineHeight:1.5}}>{c.descricao?.slice(0,80)}...</div>
+                  <div style={{height:6,background:C.cinzaClaro,borderRadius:4,overflow:"hidden"}}>
+                    <div style={{width:`${pct(c)}%`,height:"100%",background:`linear-gradient(to right,${C.azulMedio},${C.dourado})`,borderRadius:4}} />
+                  </div>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:C.cinzaMedio,marginTop:3}}>
+                    <span>Meta: R$ {Number(c.meta_valor||0).toLocaleString("pt-BR")}</span>
+                    <span style={{color:C.verde,fontWeight:700}}>{pct(c)}%</span>
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:6,flexShrink:0}}>
+                  <Btn small outline color={C.azulMedio} onClick={()=>editar(c)}>✏️</Btn>
+                  <Btn small outline color={C.vermelho} onClick={()=>excluir(c.id)}>🗑</Btn>
+                </div>
+              </div>
+            </div>
+          ))}
+      </Card>
+    </div>
+  );
+}
+
+// ── Editor Parceiros ─────────────────────────────────────────────────────────
+
+function EditorParceiros({ showToast }) {
+  const emptyForm = { nome:"", tipo:"empresarial", logo_url:"", site_url:"", descricao:"" };
+  const [lista, setLista]   = useState([]);
+  const [form, setForm]     = useState(emptyForm);
+  const [editId, setEditId] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const set = k => v => setForm(p=>({...p,[k]:v}));
+
+  const TIPOS = [
+    {value:"governamental", label:"🏛 Governamental"},
+    {value:"empresarial",   label:"🏢 Empresarial"},
+    {value:"sociedade",     label:"🤝 Sociedade Civil"},
+  ];
+
+  async function load() { const r=await supa("/site_parceiros?select=*&order=tipo.asc,nome.asc"); setLista(r||[]); }
+  useEffect(()=>{load();},[]);
+
+  async function salvar() {
+    if(!form.nome){showToast("Nome obrigatório.","error");return;}
+    setLoading(true);
+    try {
+      if(editId) { await supa(`/site_parceiros?id=eq.${editId}`,{method:"PATCH",body:JSON.stringify(form)}); showToast("Parceiro atualizado!"); }
+      else        { await supa("/site_parceiros",{method:"POST",body:JSON.stringify(form)}); showToast("Parceiro adicionado!"); }
+      setForm(emptyForm); setEditId(null); load();
+    } catch(e){showToast("Erro.","error");}
+    finally{setLoading(false);}
+  }
+
+  function editar(p) { setForm({nome:p.nome,tipo:p.tipo,logo_url:p.logo_url||"",site_url:p.site_url||"",descricao:p.descricao||""}); setEditId(p.id); }
+
+  async function excluir(id) {
+    if(!confirm("Excluir parceiro?")) return;
+    await supa(`/site_parceiros?id=eq.${id}`,{method:"DELETE",prefer:""}); showToast("Excluído."); load();
+  }
+
+  const tipoLabel = v => TIPOS.find(t=>t.value===v)?.label || v;
+  const corTipo = v => v==="governamental"?C.azulMedio:v==="empresarial"?C.dourado:C.verde;
+
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1.4fr",gap:24,alignItems:"start"}}>
+      <Card>
+        <SecaoTitulo icon="🏢">{editId?"Editar Parceiro":"Novo Parceiro"}</SecaoTitulo>
+        <div style={{display:"flex",flexDirection:"column",gap:13}}>
+          <Input label="Nome *" value={form.nome} onChange={set("nome")} placeholder="Nome da organização" required />
+          <Select label="Tipo" value={form.tipo} onChange={set("tipo")} options={TIPOS} />
+          <Input label="URL do Logo" value={form.logo_url} onChange={set("logo_url")} placeholder="https://..." />
+          {form.logo_url && <img src={form.logo_url} alt="" onError={e=>e.target.style.display="none"} style={{height:50,objectFit:"contain",borderRadius:4}} />}
+          <Input label="Site / Link" value={form.site_url} onChange={set("site_url")} placeholder="https://..." />
+          <Textarea label="Descrição" value={form.descricao} onChange={set("descricao")} placeholder="Descrição da parceria..." rows={3} />
+          <div style={{display:"flex",gap:10}}>
+            <Btn onClick={salvar} disabled={loading} color={C.azulMedio}>{loading?"Salvando...":editId?"💾 Salvar":"➕ Adicionar"}</Btn>
+            {editId && <Btn outline color={C.cinzaMedio} onClick={()=>{setForm(emptyForm);setEditId(null);}}>Cancelar</Btn>}
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <SecaoTitulo icon="📋">Parceiros ({lista.length})</SecaoTitulo>
+        {lista.length===0 ? <p style={{color:C.cinzaMedio,fontSize:13}}>Nenhum parceiro.</p>
+          : lista.map(p=>(
+            <div key={p.id} style={{display:"flex",gap:12,alignItems:"center",padding:"10px 0",borderBottom:`1px solid ${C.cinzaClaro}`}}>
+              <div style={{width:48,height:40,background:C.cinzaClaro,borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,overflow:"hidden"}}>
+                {p.logo_url ? <img src={p.logo_url} alt="" style={{maxWidth:"100%",maxHeight:"100%",objectFit:"contain"}} onError={e=>e.target.style.display="none"} /> : "🏢"}
+              </div>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:700,fontSize:13,color:C.azulEscuro}}>{p.nome}</div>
+                <span style={{fontSize:11,color:corTipo(p.tipo),fontWeight:600}}>{tipoLabel(p.tipo)}</span>
+              </div>
+              <div style={{display:"flex",gap:6}}>
+                <Btn small outline color={C.azulMedio} onClick={()=>editar(p)}>✏️</Btn>
+                <Btn small outline color={C.vermelho} onClick={()=>excluir(p.id)}>🗑</Btn>
+              </div>
+            </div>
+          ))}
+      </Card>
+    </div>
+  );
+}
+
+// ── Editor Contato ───────────────────────────────────────────────────────────
+
+function EditorContato({ showToast }) {
+  const CAMPOS = [
+    {key:"endereco",      label:"Endereço Completo"},
+    {key:"bairro_cidade", label:"Bairro, Cidade, CEP"},
+    {key:"telefone",      label:"Telefone / WhatsApp"},
+    {key:"email",         label:"E-mail de Contato"},
+    {key:"horario",       label:"Horário de Atendimento"},
+    {key:"facebook",      label:"URL do Facebook"},
+    {key:"instagram",     label:"URL do Instagram"},
+    {key:"youtube",       label:"URL do Youtube"},
+    {key:"maps_embed",    label:"Código embed do Google Maps (iframe src=...)"},
+  ];
+  const [dados, setDados] = useState({});
+  const [saving, setSaving] = useState(false);
+
+  async function load() {
+    try {
+      const r = await supa("/site_config?select=chave,valor");
+      const obj = {}; (r||[]).forEach(x=>{obj[x.chave]=x.valor;}); setDados(obj);
+    } catch(_){}
+  }
+  useEffect(()=>{load();},[]);
+
+  async function salvar() {
+    setSaving(true);
+    try {
+      for(const [chave, valor] of Object.entries(dados)) {
+        await supa("/site_config",{
+          method:"POST",
+          headers:{"Prefer":"resolution=merge-duplicates,return=representation"},
+          body:JSON.stringify({chave, valor}),
+        });
+      }
+      showToast("Dados de contato salvos!");
+    } catch(e){showToast("Erro: "+e.message,"error");}
+    finally{setSaving(false);}
+  }
+
+  return (
+    <Card>
+      <SecaoTitulo icon="📞">Dados de Contato e Redes Sociais</SecaoTitulo>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+        {CAMPOS.filter(c=>c.key!=="maps_embed").map(c=>(
+          <Input key={c.key} label={c.label}
+            value={dados[c.key]||""} onChange={v=>setDados(p=>({...p,[c.key]:v}))}
+            placeholder={`Digite ${c.label.toLowerCase()}...`} />
+        ))}
+      </div>
+      <div style={{marginTop:16}}>
+        <label style={{display:"block",fontSize:12,fontWeight:700,color:C.azulEscuro,marginBottom:6,textTransform:"uppercase",letterSpacing:".05em"}}>
+          Código embed do Google Maps (apenas o valor do src do iframe)
+        </label>
+        <textarea value={dados["maps_embed"]||""} onChange={e=>setDados(p=>({...p,maps_embed:e.target.value}))}
+          rows={3} placeholder="https://www.google.com/maps/embed?pb=..."
+          style={{width:"100%",border:`1.5px solid #ddd`,borderRadius:6,padding:"10px 12px",
+            fontSize:13,fontFamily:"inherit",resize:"vertical",outline:"none",boxSizing:"border-box"}} />
+      </div>
+      <div style={{marginTop:16}}><Btn onClick={salvar} disabled={saving} color={C.azulMedio}>{saving?"Salvando...":"💾 Salvar Contato"}</Btn></div>
+    </Card>
+  );
+}
+
+// ── Editor Galeria ───────────────────────────────────────────────────────────
+
+function EditorGaleria({ showToast }) {
+  const emptyForm = { titulo:"", url:"", categoria:"", descricao:"" };
+  const [lista, setLista]   = useState([]);
+  const [form, setForm]     = useState(emptyForm);
+  const [editId, setEditId] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const set = k => v => setForm(p=>({...p,[k]:v}));
+
+  async function load() { const r=await supa("/site_galeria?select=*&order=id.desc"); setLista(r||[]); }
+  useEffect(()=>{load();},[]);
+
+  async function salvar() {
+    if(!form.url){showToast("URL da imagem obrigatória.","error");return;}
+    setLoading(true);
+    try {
+      if(editId) { await supa(`/site_galeria?id=eq.${editId}`,{method:"PATCH",body:JSON.stringify(form)}); showToast("Imagem atualizada!"); }
+      else        { await supa("/site_galeria",{method:"POST",body:JSON.stringify(form)}); showToast("Imagem adicionada!"); }
+      setForm(emptyForm); setEditId(null); load();
+    } catch(e){showToast("Erro.","error");}
+    finally{setLoading(false);}
+  }
+
+  function editar(g) { setForm({titulo:g.titulo||"",url:g.url,categoria:g.categoria||"",descricao:g.descricao||""}); setEditId(g.id); }
+
+  async function excluir(id) {
+    if(!confirm("Remover imagem?")) return;
+    await supa(`/site_galeria?id=eq.${id}`,{method:"DELETE",prefer:""}); showToast("Removido."); load();
+  }
+
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"320px 1fr",gap:24,alignItems:"start"}}>
+      <Card>
+        <SecaoTitulo icon="🖼">{editId?"Editar Imagem":"Adicionar Imagem"}</SecaoTitulo>
+        <div style={{display:"flex",flexDirection:"column",gap:13}}>
+          <Input label="URL da Imagem *" value={form.url} onChange={set("url")} placeholder="https://..." required />
+          {form.url && <img src={form.url} alt="preview" onError={e=>e.target.style.display="none"} style={{width:"100%",height:140,objectFit:"cover",borderRadius:6}} />}
+          <Input label="Título" value={form.titulo} onChange={set("titulo")} placeholder="Título da imagem..." />
+          <Input label="Categoria" value={form.categoria} onChange={set("categoria")} placeholder="Ex: Eventos, Projetos..." />
+          <Textarea label="Descrição" value={form.descricao} onChange={set("descricao")} placeholder="Descrição opcional..." rows={3} />
+          <div style={{display:"flex",gap:10}}>
+            <Btn onClick={salvar} disabled={loading} color={C.azulMedio}>{loading?"Salvando...":editId?"💾 Salvar":"🖼 Adicionar"}</Btn>
+            {editId && <Btn outline color={C.cinzaMedio} onClick={()=>{setForm(emptyForm);setEditId(null);}}>Cancelar</Btn>}
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <SecaoTitulo icon="🖼">Galeria ({lista.length} imagens)</SecaoTitulo>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}>
+          {lista.length===0
+            ? <p style={{color:C.cinzaMedio,fontSize:13,gridColumn:"1/-1"}}>Nenhuma imagem na galeria.</p>
+            : lista.map(g=>(
+              <div key={g.id} style={{borderRadius:8,overflow:"hidden",border:`1px solid ${C.cinzaClaro}`,position:"relative"}}>
+                <img src={g.url} alt={g.titulo||""} onError={e=>e.target.style.background=C.cinzaClaro}
+                  style={{width:"100%",height:100,objectFit:"cover",display:"block"}} />
+                <div style={{padding:"8px 10px",background:C.branco}}>
+                  <div style={{fontSize:12,fontWeight:600,color:C.azulEscuro,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.titulo||"Sem título"}</div>
+                  {g.categoria && <div style={{fontSize:11,color:C.cinzaMedio}}>{g.categoria}</div>}
+                  <div style={{display:"flex",gap:6,marginTop:6}}>
+                    <Btn small outline color={C.azulMedio} onClick={()=>editar(g)}>✏️</Btn>
+                    <Btn small outline color={C.vermelho} onClick={()=>excluir(g.id)}>🗑</Btn>
+                  </div>
+                </div>
+              </div>
+            ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function Configuracoes() {
+  const [copied,setCopied] = useState(false);
+  function copiar(){navigator.clipboard.writeText(SQL_SCRIPT);setCopied(true);setTimeout(()=>setCopied(false),2000);}
+  return (
+    <div>
+      <PageHeader title="Configurações" subtitle="SQL para criar/atualizar tabelas no Supabase" />
+      <Card>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <SecaoTitulo icon="▣">Script SQL</SecaoTitulo>
+          <Btn small outline color={C.azulEscuro} onClick={copiar}>{copied?"✅ Copiado!":"📋 Copiar SQL"}</Btn>
+        </div>
+        <pre style={{background:"#0d1f0a",color:"#7ddb5e",borderRadius:8,padding:"20px 24px",
+          fontSize:12,lineHeight:1.7,overflow:"auto",maxHeight:480,fontFamily:"monospace",margin:0}}>
+          {SQL_SCRIPT}
+        </pre>
+        <div style={{marginTop:16,fontSize:13,color:C.cinzaMedio,lineHeight:1.8}}>
+          <strong style={{color:C.azulEscuro}}>Como usar:</strong><br/>
+          1. Supabase → SQL Editor → Cole e execute<br/>
+          2. <strong>Super Admin:</strong> <code style={{background:C.cinzaClaro,padding:"1px 6px",borderRadius:4}}>admin</code> / <code style={{background:C.cinzaClaro,padding:"1px 6px",borderRadius:4}}>admin123</code><br/>
+          3. <strong>Tesouraria:</strong> <code style={{background:C.cinzaClaro,padding:"1px 6px",borderRadius:4}}>tesouraria</code> / <code style={{background:C.cinzaClaro,padding:"1px 6px",borderRadius:4}}>tesouraria123</code><br/>
+          4. <strong>Visualizador:</strong> <code style={{background:C.cinzaClaro,padding:"1px 6px",borderRadius:4}}>visualizador</code> / <code style={{background:C.cinzaClaro,padding:"1px 6px",borderRadius:4}}>cevil2026</code>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// ─── APP ROOT ────────────────────────────────────────────────────────────────
+
+function App() {
+  const [user,setUser]       = useState(null);
+  const [page,setPage]       = useState("dashboard");
+  const [pessoaId,setPessoaId] = useState(null);
+
+  if(!user) return <Login onLogin={setUser} />;
+
+  const { podeEditar, podeTesouraria, podeUsuarios, podeProjetos, podeConfigs, podeEditarSite, podeAssociados } = usePerfil(user);
+
+  function Bloqueado({ msg }) {
+    return (
+      <div style={{textAlign:"center",padding:"80px 40px"}}>
+        <div style={{fontSize:48,marginBottom:16}}>🔒</div>
+        <h2 style={{color:C.azulEscuro,fontFamily:"'Merriweather',serif",marginBottom:8}}>Acesso Restrito</h2>
+        <p style={{color:C.cinzaMedio,fontSize:14}}>{msg || "Seu perfil não tem permissão para acessar esta área."}</p>
+      </div>
+    );
+  }
+
+  function renderPage(){
+    switch(page){
+      case "dashboard":        return <Dashboard setPage={setPage} />;
+      case "novo-cadastro":    return podeEditar     ? <NovoCadastro onSaved={()=>setPage("pessoas")} />   : <Bloqueado msg="Somente o Super Admin pode cadastrar pessoas." />;
+      case "pessoas":          return                  <Pessoas setPage={setPage} setPessoaId={setPessoaId} user={user} />;
+      case "perfil-pessoa":    return                  <PerfilPessoa pessoaId={pessoaId} setPage={setPage} user={user} />;
+      case "registrar-visita": return podeEditar     ? <RegistrarVisita />                                 : <Bloqueado msg="Somente o Super Admin pode registrar visitas." />;
+      case "relatorios":       return                  <Relatorios />;
+      case "tesouraria":       return podeTesouraria ? <Tesouraria />                                      : <Bloqueado msg="Esta área é exclusiva para Tesouraria e Super Admin." />;
+      case "minha-conta":      return                  <MinhaConta user={user} />;
+      case "projetos":         return podeProjetos   ? <Projetos />                                        : <Bloqueado msg="Somente o Super Admin pode gerenciar projetos." />;
+      case "usuarios":         return podeUsuarios   ? <Usuarios />                                        : <Bloqueado msg="Somente o Super Admin pode gerenciar usuários." />;
+      case "configuracoes":    return podeConfigs    ? <Configuracoes />                                   : <Bloqueado msg="Somente o Super Admin pode acessar as configurações." />;
+      case "associados":       return podeAssociados  ? <Associados user={user} />                         : <Bloqueado msg="Acesso negado." />;
+      case "transparencia-fin": return <TransparenciaFinanceira />;
+      case "editor-site":     return podeEditarSite ? <EditorSite />                                      : <Bloqueado msg="Somente o Super Admin pode editar o site." />;
+      default:                 return <Dashboard setPage={setPage} />;
+    }
+  }
+
+  return (
+    <Layout user={user} page={page} setPage={setPage} onLogout={()=>{setUser(null);setPage("dashboard");}}>
+      {renderPage()}
+    </Layout>
+  );
+}
+
+// Montar o app
+const _root = ReactDOM.createRoot(document.getElementById('root'));
+_root.render(React.createElement(App));
+  </script>
+
+  <script>
+    // Remove loading após o React montar
+    const _obs = new MutationObserver(() => {
+      if (document.getElementById('root').children.length > 0) {
+        const el = document.getElementById('loading');
+        if (el) el.style.display = 'none';
+        _obs.disconnect();
+      }
+    });
+    _obs.observe(document.getElementById('root'), { childList: true, subtree: true });
+  </script>
+</body>
+</html>
