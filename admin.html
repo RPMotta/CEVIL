@@ -1686,12 +1686,22 @@ CREATE TABLE IF NOT EXISTS site_config (
   atualizado_em timestamptz default now()
 );
 
+CREATE TABLE IF NOT EXISTS site_albuns (
+  id bigserial primary key,
+  nome text not null,
+  descricao text,
+  capa_url text,
+  ordem integer default 0,
+  criado_em timestamptz default now()
+);
+
 CREATE TABLE IF NOT EXISTS site_galeria (
   id bigserial primary key,
+  album_id bigint references site_albuns(id) on delete set null,
   titulo text,
   url text not null,
-  categoria text,
   descricao text,
+  ordem integer default 0,
   criado_em timestamptz default now()
 );
 
@@ -1703,6 +1713,7 @@ ALTER TABLE site_causas      DISABLE ROW LEVEL SECURITY;
 ALTER TABLE site_parceiros   DISABLE ROW LEVEL SECURITY;
 ALTER TABLE site_config      DISABLE ROW LEVEL SECURITY;
 ALTER TABLE site_galeria     DISABLE ROW LEVEL SECURITY;
+ALTER TABLE site_albuns      DISABLE ROW LEVEL SECURITY;
 
 CREATE TABLE IF NOT EXISTS associados (
   id bigserial primary key,
@@ -3174,74 +3185,235 @@ function EditorContato({ showToast }) {
   );
 }
 
-// ── Editor Galeria ───────────────────────────────────────────────────────────
+// ── Editor Galeria com Álbuns ─────────────────────────────────────────────────
 
 function EditorGaleria({ showToast }) {
-  const emptyForm = { titulo:"", url:"", categoria:"", descricao:"" };
+  const [aba, setAba] = useState("albuns");
+  return (
+    <div>
+      <div style={{display:"flex",gap:0,marginBottom:20,borderBottom:`2px solid #e8e8e8`}}>
+        {[["albuns","📁 Álbuns"],["fotos","🖼 Fotos"]].map(([id,label])=>(
+          <button key={id} onClick={()=>setAba(id)}
+            style={{padding:"9px 20px",background:"transparent",border:"none",
+              borderBottom:`3px solid ${aba===id?C.dourado:"transparent"}`,
+              color:aba===id?C.azulEscuro:C.cinzaMedio,
+              fontWeight:aba===id?700:400,fontSize:13,cursor:"pointer",
+              marginBottom:-2,fontFamily:"inherit"}}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {aba==="albuns" && <GerenciarAlbuns showToast={showToast} />}
+      {aba==="fotos"  && <GerenciarFotos showToast={showToast} />}
+    </div>
+  );
+}
+
+function GerenciarAlbuns({ showToast }) {
+  const emptyForm = { nome:"", descricao:"", capa_url:"", ordem:0 };
   const [lista, setLista]   = useState([]);
   const [form, setForm]     = useState(emptyForm);
   const [editId, setEditId] = useState(null);
   const [loading, setLoading] = useState(false);
   const set = k => v => setForm(p=>({...p,[k]:v}));
 
-  async function load() { const r=await supa("/site_galeria?select=*&order=id.desc"); setLista(r||[]); }
+  async function load() {
+    const r = await supa("/site_albuns?select=id,nome,descricao,capa_url,ordem,criado_em&order=ordem.asc,criado_em.desc");
+    // Para cada álbum, contar fotos
+    const albuns = r||[];
+    for(const a of albuns){
+      try {
+        const c = await supa(`/site_galeria?album_id=eq.${a.id}&select=id`);
+        a._fotos = (c||[]).length;
+      } catch(_){ a._fotos = 0; }
+    }
+    setLista(albuns);
+  }
   useEffect(()=>{load();},[]);
 
   async function salvar() {
-    if(!form.url){showToast("URL da imagem obrigatória.","error");return;}
+    if(!form.nome){showToast("Nome do álbum obrigatório.","error");return;}
     setLoading(true);
     try {
-      if(editId) { await supa(`/site_galeria?id=eq.${editId}`,{method:"PATCH",body:JSON.stringify(form)}); showToast("Imagem atualizada!"); }
-      else        { await supa("/site_galeria",{method:"POST",body:JSON.stringify(form)}); showToast("Imagem adicionada!"); }
+      const payload = {...form, ordem:Number(form.ordem)||0};
+      if(editId) { await supa(`/site_albuns?id=eq.${editId}`,{method:"PATCH",body:JSON.stringify(payload)}); showToast("Álbum atualizado!"); }
+      else        { await supa("/site_albuns",{method:"POST",body:JSON.stringify(payload)}); showToast("Álbum criado!"); }
       setForm(emptyForm); setEditId(null); load();
-    } catch(e){showToast("Erro.","error");}
+    } catch(e){showToast("Erro: "+e.message,"error");}
     finally{setLoading(false);}
   }
 
-  function editar(g) { setForm({titulo:g.titulo||"",url:g.url,categoria:g.categoria||"",descricao:g.descricao||""}); setEditId(g.id); }
+  function editar(a){ setForm({nome:a.nome,descricao:a.descricao||"",capa_url:a.capa_url||"",ordem:a.ordem||0}); setEditId(a.id); }
 
-  async function excluir(id) {
-    if(!confirm("Remover imagem?")) return;
-    await supa(`/site_galeria?id=eq.${id}`,{method:"DELETE",prefer:""}); showToast("Removido."); load();
+  async function excluir(id){
+    if(!confirm("Excluir álbum e todas as fotos?")) return;
+    try {
+      await supa(`/site_galeria?album_id=eq.${id}`,{method:"DELETE",prefer:""});
+      await supa(`/site_albuns?id=eq.${id}`,{method:"DELETE",prefer:""});
+      showToast("Álbum excluído."); load();
+    } catch(e){showToast("Erro.","error");}
   }
 
   return (
-    <div style={{display:"grid",gridTemplateColumns:"320px 1fr",gap:24,alignItems:"start"}}>
+    <div style={{display:"grid",gridTemplateColumns:"340px 1fr",gap:24,alignItems:"start"}}>
       <Card>
-        <SecaoTitulo icon="🖼">{editId?"Editar Imagem":"Adicionar Imagem"}</SecaoTitulo>
+        <SecaoTitulo icon="📁">{editId?"Editar Álbum":"Criar Novo Álbum"}</SecaoTitulo>
         <div style={{display:"flex",flexDirection:"column",gap:13}}>
-          <Input label="URL da Imagem *" value={form.url} onChange={set("url")} placeholder="https://..." required />
-          {form.url && <img src={form.url} alt="preview" onError={e=>e.target.style.display="none"} style={{width:"100%",height:140,objectFit:"cover",borderRadius:6}} />}
-          <Input label="Título" value={form.titulo} onChange={set("titulo")} placeholder="Título da imagem..." />
-          <Input label="Categoria" value={form.categoria} onChange={set("categoria")} placeholder="Ex: Eventos, Projetos..." />
-          <Textarea label="Descrição" value={form.descricao} onChange={set("descricao")} placeholder="Descrição opcional..." rows={3} />
+          <Input label="Nome do Álbum *" value={form.nome} onChange={set("nome")} placeholder="Ex: Festa Junina 2026" required />
+          <Textarea label="Descrição" value={form.descricao} onChange={set("descricao")} placeholder="Descreva o álbum..." rows={3} />
+          <Input label="URL da Foto de Capa" value={form.capa_url} onChange={set("capa_url")} placeholder="https://..." />
+          {form.capa_url && <img src={form.capa_url} alt="capa" onError={e=>e.target.style.display="none"}
+            style={{width:"100%",height:120,objectFit:"cover",borderRadius:6}} />}
+          <Input label="Ordem de exibição" value={String(form.ordem)} onChange={v=>set("ordem")(Number(v)||0)} type="number" placeholder="0" />
           <div style={{display:"flex",gap:10}}>
-            <Btn onClick={salvar} disabled={loading} color={C.azulMedio}>{loading?"Salvando...":editId?"💾 Salvar":"🖼 Adicionar"}</Btn>
+            <Btn onClick={salvar} disabled={loading} color={C.azulMedio}>{loading?"Salvando...":editId?"💾 Salvar Álbum":"📁 Criar Álbum"}</Btn>
             {editId && <Btn outline color={C.cinzaMedio} onClick={()=>{setForm(emptyForm);setEditId(null);}}>Cancelar</Btn>}
           </div>
         </div>
       </Card>
 
       <Card>
-        <SecaoTitulo icon="🖼">Galeria ({lista.length} imagens)</SecaoTitulo>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}>
-          {lista.length===0
-            ? <p style={{color:C.cinzaMedio,fontSize:13,gridColumn:"1/-1"}}>Nenhuma imagem na galeria.</p>
-            : lista.map(g=>(
-              <div key={g.id} style={{borderRadius:8,overflow:"hidden",border:`1px solid ${C.cinzaClaro}`,position:"relative"}}>
-                <img src={g.url} alt={g.titulo||""} onError={e=>e.target.style.background=C.cinzaClaro}
-                  style={{width:"100%",height:100,objectFit:"cover",display:"block"}} />
-                <div style={{padding:"8px 10px",background:C.branco}}>
-                  <div style={{fontSize:12,fontWeight:600,color:C.azulEscuro,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.titulo||"Sem título"}</div>
-                  {g.categoria && <div style={{fontSize:11,color:C.cinzaMedio}}>{g.categoria}</div>}
-                  <div style={{display:"flex",gap:6,marginTop:6}}>
-                    <Btn small outline color={C.azulMedio} onClick={()=>editar(g)}>✏️</Btn>
-                    <Btn small outline color={C.vermelho} onClick={()=>excluir(g.id)}>🗑</Btn>
+        <SecaoTitulo icon="📁">Álbuns Criados ({lista.length})</SecaoTitulo>
+        {lista.length===0
+          ? <div style={{textAlign:"center",padding:"40px 0",color:C.cinzaMedio}}>
+              <div style={{fontSize:40,marginBottom:8}}>📁</div>
+              <div>Nenhum álbum criado ainda.</div>
+            </div>
+          : <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:16}}>
+              {lista.map(a=>(
+                <div key={a.id} style={{border:`1px solid ${C.cinzaClaro}`,borderRadius:10,overflow:"hidden"}}>
+                  <div style={{
+                    height:120,
+                    background:a.capa_url?`url(${a.capa_url}) center/cover`:"linear-gradient(135deg,#1a3a5c,#c8992a)",
+                    position:"relative"
+                  }}>
+                    <div style={{position:"absolute",bottom:8,right:8,background:"rgba(0,0,0,.6)",
+                      color:"#fff",fontSize:11,padding:"2px 8px",borderRadius:12}}>
+                      📷 {a._fotos||0} foto(s)
+                    </div>
+                  </div>
+                  <div style={{padding:"12px 14px"}}>
+                    <div style={{fontWeight:700,fontSize:14,color:C.azulEscuro,marginBottom:4}}>{a.nome}</div>
+                    {a.descricao && <div style={{fontSize:12,color:C.cinzaMedio,marginBottom:8,lineHeight:1.5}}>{a.descricao.slice(0,60)}{a.descricao.length>60?"...":""}</div>}
+                    <div style={{display:"flex",gap:8}}>
+                      <Btn small outline color={C.azulMedio} onClick={()=>editar(a)}>✏️ Editar</Btn>
+                      <Btn small outline color={C.vermelho} onClick={()=>excluir(a.id)}>🗑 Excluir</Btn>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+        }
+      </Card>
+    </div>
+  );
+}
+
+function GerenciarFotos({ showToast }) {
+  const emptyForm = { album_id:"", titulo:"", url:"", descricao:"", ordem:0 };
+  const [albuns, setAlbuns]   = useState([]);
+  const [fotos, setFotos]     = useState([]);
+  const [form, setForm]       = useState(emptyForm);
+  const [editId, setEditId]   = useState(null);
+  const [albumSel, setAlbumSel] = useState("");
+  const [loading, setLoading] = useState(false);
+  const set = k => v => setForm(p=>({...p,[k]:v}));
+
+  useEffect(()=>{
+    supa("/site_albuns?select=id,nome&order=ordem.asc,criado_em.desc").then(r=>setAlbuns(r||[])).catch(()=>{});
+  },[]);
+
+  async function loadFotos(id){
+    if(!id) return;
+    const r = await supa(`/site_galeria?album_id=eq.${id}&select=*&order=ordem.asc,criado_em.desc`);
+    setFotos(r||[]);
+  }
+
+  function handleAlbumChange(id){
+    setAlbumSel(id);
+    setForm(p=>({...p,album_id:id}));
+    if(id) loadFotos(id);
+    else setFotos([]);
+  }
+
+  async function salvar(){
+    if(!form.url){showToast("URL da foto obrigatória.","error");return;}
+    if(!form.album_id){showToast("Selecione um álbum.","error");return;}
+    setLoading(true);
+    try {
+      const payload = {...form, album_id:Number(form.album_id), ordem:Number(form.ordem)||0};
+      if(editId) { await supa(`/site_galeria?id=eq.${editId}`,{method:"PATCH",body:JSON.stringify(payload)}); showToast("Foto atualizada!"); }
+      else        { await supa("/site_galeria",{method:"POST",body:JSON.stringify(payload)}); showToast("Foto adicionada!"); }
+      setForm({...emptyForm, album_id:form.album_id}); setEditId(null); loadFotos(albumSel);
+    } catch(e){showToast("Erro: "+e.message,"error");}
+    finally{setLoading(false);}
+  }
+
+  function editar(f){ setForm({album_id:String(f.album_id||""),titulo:f.titulo||"",url:f.url,descricao:f.descricao||"",ordem:f.ordem||0}); setEditId(f.id); }
+
+  async function excluir(id){
+    if(!confirm("Remover esta foto?")) return;
+    await supa(`/site_galeria?id=eq.${id}`,{method:"DELETE",prefer:""});
+    showToast("Foto removida."); loadFotos(albumSel);
+  }
+
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"340px 1fr",gap:24,alignItems:"start"}}>
+      <Card>
+        <SecaoTitulo icon="🖼">{editId?"Editar Foto":"Adicionar Foto"}</SecaoTitulo>
+        <div style={{display:"flex",flexDirection:"column",gap:13}}>
+          <Select label="Álbum *" value={form.album_id}
+            onChange={v=>{set("album_id")(v);handleAlbumChange(v);}}
+            options={[{value:"",label:"Selecione o álbum..."},...albuns.map(a=>({value:String(a.id),label:a.nome}))]} />
+          <Input label="URL da Foto *" value={form.url} onChange={set("url")} placeholder="https://..." required />
+          {form.url && <img src={form.url} alt="preview" onError={e=>e.target.style.display="none"}
+            style={{width:"100%",height:140,objectFit:"cover",borderRadius:6}} />}
+          <Input label="Título / Legenda" value={form.titulo} onChange={set("titulo")} placeholder="Ex: Apresentação da turma..." />
+          <Textarea label="Descrição" value={form.descricao} onChange={set("descricao")} placeholder="Descrição opcional..." rows={2} />
+          <Input label="Ordem" value={String(form.ordem)} onChange={v=>set("ordem")(Number(v)||0)} type="number" placeholder="0" />
+          <div style={{display:"flex",gap:10}}>
+            <Btn onClick={salvar} disabled={loading} color={C.azulMedio}>{loading?"Salvando...":editId?"💾 Salvar":"🖼 Adicionar Foto"}</Btn>
+            {editId && <Btn outline color={C.cinzaMedio} onClick={()=>{setForm({...emptyForm,album_id:form.album_id});setEditId(null);}}>Cancelar</Btn>}
+          </div>
+          <div style={{fontSize:12,color:C.cinzaMedio,lineHeight:1.6,background:C.cinzaClaro,padding:"10px 12px",borderRadius:6}}>
+            💡 <strong>Dica:</strong> Use serviços gratuitos como <strong>Imgur</strong>, <strong>Google Fotos</strong> (link público) ou <strong>Cloudinary</strong> para hospedar as fotos e copie a URL direta da imagem.
+          </div>
         </div>
+      </Card>
+
+      <Card>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+          <SecaoTitulo icon="🖼">Fotos do Álbum</SecaoTitulo>
+          {albumSel && <span style={{fontSize:12,color:C.cinzaMedio}}>{fotos.length} foto(s)</span>}
+        </div>
+        {!albumSel
+          ? <div style={{textAlign:"center",padding:"40px 0",color:C.cinzaMedio}}>
+              <div style={{fontSize:36,marginBottom:8}}>📁</div>
+              <div>Selecione um álbum ao lado para ver as fotos.</div>
+            </div>
+          : fotos.length===0
+            ? <div style={{textAlign:"center",padding:"40px 0",color:C.cinzaMedio}}>
+                <div style={{fontSize:36,marginBottom:8}}>🖼</div>
+                <div>Nenhuma foto neste álbum ainda.</div>
+              </div>
+            : <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12}}>
+                {fotos.map(f=>(
+                  <div key={f.id} style={{borderRadius:8,overflow:"hidden",border:`1px solid ${C.cinzaClaro}`}}>
+                    <img src={f.url} alt={f.titulo||""} onError={e=>e.target.style.background=C.cinzaClaro}
+                      style={{width:"100%",height:100,objectFit:"cover",display:"block"}} />
+                    <div style={{padding:"8px 10px",background:C.branco}}>
+                      <div style={{fontSize:12,fontWeight:600,color:C.azulEscuro,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                        {f.titulo||"Sem legenda"}
+                      </div>
+                      <div style={{display:"flex",gap:6,marginTop:6}}>
+                        <Btn small outline color={C.azulMedio} onClick={()=>editar(f)}>✏️</Btn>
+                        <Btn small outline color={C.vermelho} onClick={()=>excluir(f.id)}>🗑</Btn>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+        }
       </Card>
     </div>
   );

@@ -68,6 +68,7 @@
             </ul>
           </li>
           <li><a href="noticias.html">Notícias</a></li>
+          <li><a href="galeria.html">Galeria</a></li>
           <li>
             <a href="#">Solidariedade ▾</a>
             <ul class="dropdown">
@@ -77,6 +78,7 @@
           </li>
           <li><a href="contato.html">Contato</a></li>
           <li><a href="causas.html" class="btn-doe">Doe Agora</a></li>
+          <li><a href="admin.html" style="background:#c8992a;color:#fff;padding:9px 18px;border-radius:5px;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;margin-left:6px;">🔐 Admin</a></li>
         </ul>
       </nav>
     </div>
@@ -196,8 +198,41 @@
       <p class="secao-titulo" style="text-align:center;">Fique por Dentro</p>
       <div class="divisor divisor-centro"></div>
       <h2 style="text-align:center;margin-bottom:40px;">Acompanhe as notícias da Associação</h2>
-      <div class="noticias-grid" id="noticias-dinamicas">
-        <!-- carregado dinamicamente do Supabase -->
+      <div class="noticias-grid">
+        <!-- ============================================================
+             COMO ADICIONAR FOTO NAS NOTÍCIAS:
+             Substitua o "background:" pelo caminho da sua imagem assim:
+             style="background-image:url('imagens/noticia-1.jpg');background-size:cover;background-position:center;"
+             A imagem deve estar na pasta "imagens/" do repositório.
+             ============================================================ -->
+
+        <article class="noticia-card">
+          <div class="noticia-img" style="background-image:url('https://admin.cnnbrasil.com.br/wp-content/uploads/sites/12/2026/05/Preto-Velho-e-13-de-maio-entenda-o-significado-da-data-na-Umbanda.jpg?w=1200&h=630&crop=1');background-size:cover;background-position:center;background-color:#1a3a5c;"></div>
+          <div class="noticia-corpo">
+            <span class="noticia-data">13 de Maio, 2026</span>
+            <h3><a href="noticias.html">Dia Nacional do Preto Velho</a></h3>
+            <p>O dia 13 de maio marca a abolição da escravatura no Brasil e, na Umbanda, é celebrado como o Dia do Preto Velho — entidades que representam ancestrais africanos que retornam para oferecer cura, sabedoria e acolhimento.</p>
+            <a href="noticias.html" class="leia-mais">Leia mais →</a>
+          </div>
+        </article>
+        <article class="noticia-card">
+          <div class="noticia-img" style="background-image:url('imagens/noticia-2.jpg');background-size:cover;background-position:center;background-color:#1e5fa8;"></div>
+          <div class="noticia-corpo">
+            <span class="noticia-data">13 de Maio, 2026</span>
+            <h3><a href="noticias.html">Título da Notícia 2</a></h3>
+            <p>Resumo breve da notícia. Substitua este texto pelo conteúdo real da sua publicação.</p>
+            <a href="noticias.html" class="leia-mais">Leia mais →</a>
+          </div>
+        </article>
+        <article class="noticia-card">
+          <div class="noticia-img" style="background-image:url('imagens/noticia-3.jpg');background-size:cover;background-position:center;background-color:#c8992a;"></div>
+          <div class="noticia-corpo">
+            <span class="noticia-data">13 de Maio, 2026</span>
+            <h3><a href="noticias.html">Título da Notícia 3</a></h3>
+            <p>Resumo breve da notícia. Substitua este texto pelo conteúdo real da sua publicação.</p>
+            <a href="noticias.html" class="leia-mais">Leia mais →</a>
+          </div>
+        </article>
       </div>
       <div style="text-align:center;margin-top:35px;">
         <a href="noticias.html" class="btn btn-primary">Ver todas as notícias</a>
@@ -315,52 +350,5 @@
   </footer>
 
   <script src="main.js"></script>
-
-<script>
-(function() {
-  const SUPA_URL = "https://hnpahosgldgecwgobizb.supabase.co";
-  const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhucGFob3NnbGRnZWN3Z29iaXpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5OTg3MzksImV4cCI6MjA5NjU3NDczOX0.Ux4xGVVshJpOZ0vn10YZ6seeia_m4TjwTboiKTXVkdM";
-
-  async function carregarNoticias() {
-    const grid = document.getElementById('noticias-dinamicas');
-    if (!grid) return;
-    try {
-      const res = await fetch(
-        SUPA_URL + '/rest/v1/site_noticias?select=*&order=data_publicacao.desc&limit=3',
-        { headers: { apikey: SUPA_KEY, Authorization: 'Bearer ' + SUPA_KEY } }
-      );
-      const noticias = await res.json();
-      if (!Array.isArray(noticias) || noticias.length === 0) return;
-      grid.innerHTML = noticias.map(n => {
-        const data = n.data_publicacao
-          ? new Date(n.data_publicacao + 'T12:00:00').toLocaleDateString('pt-BR', {day:'2-digit',month:'long',year:'numeric'}).toUpperCase()
-          : '';
-        const img = n.imagem_url
-          ? `background-image:url('${n.imagem_url}');background-size:cover;background-position:center;`
-          : `background:linear-gradient(135deg,#1a3a5c,#c8992a);`;
-        return `
-          <article class="noticia-card">
-            <div class="noticia-img" style="${img}"></div>
-            <div class="noticia-corpo">
-              <span class="noticia-data">${data}</span>
-              <h3><a href="noticias.html">${n.titulo}</a></h3>
-              <p>${n.resumo}</p>
-              <a href="noticias.html" class="leia-mais">Leia mais →</a>
-            </div>
-          </article>`;
-      }).join('');
-    } catch(e) {
-      console.log('Erro ao carregar notícias:', e);
-    }
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', carregarNoticias);
-  } else {
-    carregarNoticias();
-  }
-})();
-</script>
-
 </body>
 </html>

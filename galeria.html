@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Galeria de Fotos – Associação CEVIL</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@300;400;700&family=Open+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="paginas.css" />
+  <style>
+    .albuns-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:28px; margin-bottom:50px; }
+    .album-card { background:#fff; border-radius:10px; overflow:hidden; box-shadow:0 4px 20px rgba(0,0,0,.1); cursor:pointer; transition:all .3s; }
+    .album-card:hover { transform:translateY(-4px); box-shadow:0 8px 30px rgba(0,0,0,.18); }
+    .album-capa { height:200px; background:linear-gradient(135deg,#1a3a5c,#c8992a); background-size:cover; background-position:center; position:relative; }
+    .album-count { position:absolute; bottom:10px; right:10px; background:rgba(0,0,0,.65); color:#fff; font-size:12px; font-weight:700; padding:3px 10px; border-radius:20px; }
+    .album-info { padding:18px 20px; }
+    .album-nome { font-size:17px; font-family:'Merriweather',serif; color:#1a3a5c; margin-bottom:6px; }
+    .album-desc { font-size:13px; color:#666; line-height:1.6; }
+    /* Lightbox */
+    .fotos-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
+    .foto-item { border-radius:8px; overflow:hidden; cursor:pointer; aspect-ratio:1; transition:all .3s; }
+    .foto-item:hover { transform:scale(1.03); box-shadow:0 4px 16px rgba(0,0,0,.2); }
+    .foto-item img { width:100%; height:100%; object-fit:cover; display:block; }
+    .lightbox { display:none; position:fixed; inset:0; background:rgba(0,0,0,.92); z-index:9999; align-items:center; justify-content:center; flex-direction:column; }
+    .lightbox.ativo { display:flex; }
+    .lightbox img { max-width:90vw; max-height:80vh; object-fit:contain; border-radius:6px; }
+    .lightbox-legenda { color:#fff; margin-top:14px; font-size:14px; text-align:center; max-width:600px; }
+    .lightbox-fechar { position:absolute; top:20px; right:24px; color:#fff; font-size:32px; cursor:pointer; line-height:1; background:none; border:none; }
+    .lightbox-nav { position:absolute; top:50%; color:#fff; font-size:36px; cursor:pointer; background:rgba(255,255,255,.1); border:none; padding:10px 16px; border-radius:5px; transform:translateY(-50%); }
+    .lightbox-prev { left:16px; }
+    .lightbox-next { right:16px; }
+    .btn-voltar { display:inline-flex; align-items:center; gap:8px; color:#1a3a5c; font-weight:700; font-size:14px; margin-bottom:28px; cursor:pointer; background:none; border:none; padding:0; font-family:inherit; }
+    .btn-voltar:hover { color:#c8992a; }
+    @media(max-width:768px){
+      .albuns-grid { grid-template-columns:1fr 1fr; }
+      .fotos-grid { grid-template-columns:repeat(3,1fr); }
+    }
+    @media(max-width:480px){
+      .albuns-grid { grid-template-columns:1fr; }
+      .fotos-grid { grid-template-columns:repeat(2,1fr); }
+    }
+  </style>
+</head>
+<body>
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Associação CEVIL – Casa de Esperança Viveiro de Luz</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@300;400;700&family=Open+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="paginas.css" />
+</head>
+<body>
+
+  <div class="barra-top">
+    <div class="container">
+      <div class="barra-top-info">
+        <span>🕐 Segunda a Sexta – 08h às 17h</span>
+        <span>📍 Rua Graciosa 227, São Sebastião – Palhoça, SC</span>
+        <span>📞 (48) 9 9999 - 9999</span>
+      </div>
+      <div class="barra-top-redes"><a href="#">Facebook</a><a href="#">Instagram</a><a href="#">Youtube</a></div>
+    </div>
+  </div>
+
+  <header class="header">
+    <div class="container header-inner">
+      <a href="index.html" class="logo">
+        <div class="logo-texto"><span class="nome">Associação CEVIL</span><span class="slogan">Casa de Esperança Viveiro de Luz</span></div>
+      </a>
+      <button class="menu-toggle" id="menuToggle"><span></span><span></span><span></span></button>
+      <nav class="nav">
+        <ul id="menuPrincipal">
+          <li><a href="index.html">Início</a></li>
+          <li><a href="sobre.html">Institucional ▾</a>
+            <ul class="dropdown">
+              <li><a href="sobre.html">Sobre a Fundação</a></li>
+              <li><a href="documentos.html">Documentos de Governança</a></li>
+              <li><a href="parcerias.html">Parcerias Institucionais</a></li>
+              <li><a href="transparencia.html">Portal da Transparência</a></li>
+            </ul>
+          </li>
+          <li><a href="#">Nossas Unidades ▾</a>
+            <ul class="dropdown">
+              <li><a href="unidade-1.html">Unidade 1</a></li>
+            </ul>
+          </li>
+          <li><a href="noticias.html" >Notícias</a></li>
+          <li><a href="causas.html">Solidariedade ▾</a>
+            <ul class="dropdown">
+              <li><a href="causas.html">Nossas Causas</a></li>
+              <li><a href="voluntario.html">Seja um Voluntário</a></li>
+            </ul>
+          </li>
+          <li><a href="contato.html">Contato</a></li>
+          <li><a href="causas.html" class="btn-doe">Doe Agora</a></li>
+          <li><a href="admin.html" style="background:#c8992a;color:#fff;padding:9px 18px;border-radius:5px;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;margin-left:6px;">🔐 Admin</a></li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <div class="banner-interno" style="background: linear-gradient(135deg,#1a3a5c,#c8992a);">
+    <div class="banner-overlay"></div>
+    <div class="container banner-conteudo">
+      <h1>Galeria de Fotos</h1>
+      <nav class="breadcrumb">
+        <a href="index.html">Início</a> <span>/</span> <span>Galeria</span>
+      </nav>
+    </div>
+  </div>
+
+  <main class="pagina-conteudo">
+    <div class="container">
+
+      <!-- VIEW: lista de álbuns -->
+      <div id="view-albuns">
+        <p class="secao-titulo" style="text-align:center;">Memórias e Momentos</p>
+        <div class="divisor divisor-centro"></div>
+        <h2 style="text-align:center;color:#1a3a5c;margin-bottom:40px;font-size:26px;">Nossos Álbuns de Fotos</h2>
+        <div class="albuns-grid" id="albuns-grid">
+          <!-- carregado via JS -->
+          <div style="grid-column:1/-1;text-align:center;padding:60px 0;color:#666;">Carregando álbuns...</div>
+        </div>
+      </div>
+
+      <!-- VIEW: fotos do álbum -->
+      <div id="view-fotos" style="display:none;">
+        <button class="btn-voltar" onclick="voltarAlbuns()">← Voltar aos álbuns</button>
+        <h2 id="album-titulo" style="color:#1a3a5c;font-family:'Merriweather',serif;margin-bottom:8px;"></h2>
+        <p id="album-desc" style="color:#666;margin-bottom:30px;font-size:15px;"></p>
+        <div class="fotos-grid" id="fotos-grid">
+          <!-- carregado via JS -->
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Lightbox -->
+  <div class="lightbox" id="lightbox" onclick="fecharLightbox(event)">
+    <button class="lightbox-fechar" onclick="fecharLightbox()">✕</button>
+    <button class="lightbox-nav lightbox-prev" onclick="navLightbox(-1,event)">‹</button>
+    <img id="lightbox-img" src="" alt="" />
+    <div class="lightbox-legenda" id="lightbox-legenda"></div>
+    <button class="lightbox-nav lightbox-next" onclick="navLightbox(1,event)">›</button>
+  </div>
+
+<footer class="footer">
+    <div class="footer-doe"><div class="container"><h3>Exercite a Solidariedade!</h3><p>Doe até 6% do seu imposto de renda.</p><a href="causas.html" class="btn btn-primary">Doe agora</a></div></div>
+    <div class="footer-top"><div class="container"><div class="footer-grid">
+      <div class="footer-sobre"><div class="logo-texto" style="margin-bottom:15px;"><span class="nome" style="color:#fff;font-size:18px;">Associação CEVIL</span><span class="slogan">Casa de Esperança Viveiro fde Luz</span></div><p>Entidade filantrópica, sem fins lucrativos.</p><p><strong>CNPJ:</strong> [00.000.000/0001-00]</p></div>
+      <div><h4 class="footer-titulo">Links Rápidos</h4><ul class="footer-links"><li><a href="index.html">→ Início</a></li><li><a href="sobre.html">→ Sobre</a></li><li><a href="noticias.html">→ Notícias</a></li><li><a href="contato.html">→ Contato</a></li></ul></div>
+      <div><h4 class="footer-titulo">Unidades</h4><ul class="footer-links"><li><a href="unidade-1.html">→ Unidade 1</a></li>
+      <div><h4 class="footer-titulo">Contato</h4><div class="footer-contato"><p>📧 [email@fundacao.org.br]</p><p>📞 (48) 9 9999 - 9999</p><p>📍 Rua Graciosa 227, São Sebastião – Palhoça, SC</p></div></div>
+    </div></div></div>
+    <div class="footer-bottom"><div class="container"><p>© 2026 Associação CEVIL. Todos os direitos reservados.</p></div></div>
+  </footer>
+
+  <script src="main.js"></script>
+</body>
+</html>
+
+
+<script>
+(function(){
+  var SUPA_URL="https://hnpahosgldgecwgobizb.supabase.co", SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhucGFob3NnbGRnZWN3Z29iaXpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5OTg3MzksImV4cCI6MjA5NjU3NDczOX0.Ux4xGVVshJpOZ0vn10YZ6seeia_m4TjwTboiKTXVkdM";
+  var H={apikey:SUPA_KEY,Authorization:"Bearer "+SUPA_KEY};
+  function get(p){return fetch(SUPA_URL+"/rest/v1"+p,{headers:H}).then(r=>r.json()).catch(()=>[]);}
+
+  var fotosAtual = [];
+  var lightboxIdx = 0;
+
+  // Carregar álbuns
+  window.addEventListener("load", async function(){
+    var grid = document.getElementById("albuns-grid");
+    var albuns = await get("/site_albuns?select=*&order=ordem.asc,criado_em.desc");
+    if(!Array.isArray(albuns)||!albuns.length){
+      grid.innerHTML="<div style=\"grid-column:1/-1;text-align:center;padding:60px 0;color:#666;\"><div style=\"font-size:48px;margin-bottom:12px;\">📷</div><p>Nenhum álbum publicado ainda.</p></div>";
+      return;
+    }
+    // Contar fotos por álbum
+    for(var a of albuns){
+      var f=await get("/site_galeria?album_id=eq."+a.id+"&select=id");
+      a._total=(f||[]).length;
+    }
+    grid.innerHTML = albuns.map(function(a){
+      var bg=a.capa_url?"background-image:url('"+a.capa_url+"');background-size:cover;background-position:center;":"background:linear-gradient(135deg,#1a3a5c,#c8992a);";
+      return "<div class=\"album-card\" onclick=\"abrirAlbum("+a.id+",'"+encodeURIComponent(a.nome)+"','"+encodeURIComponent(a.descricao||"")+"')\">"
+        +"<div class=\"album-capa\" style=\""+bg+"\"><span class=\"album-count\">📷 "+a._total+" foto(s)</span></div>"
+        +"<div class=\"album-info\"><div class=\"album-nome\">"+a.nome+"</div>"
+        +(a.descricao?"<div class=\"album-desc\">"+a.descricao.slice(0,80)+(a.descricao.length>80?"...":"")+"</div>":"")
+        +"</div></div>";
+    }).join("");
+  });
+
+  window.abrirAlbum = async function(id, nome, desc){
+    document.getElementById("view-albuns").style.display="none";
+    document.getElementById("view-fotos").style.display="block";
+    document.getElementById("album-titulo").textContent=decodeURIComponent(nome);
+    document.getElementById("album-desc").textContent=decodeURIComponent(desc);
+    document.getElementById("fotos-grid").innerHTML="<div style=\"grid-column:1/-1;text-align:center;padding:40px;color:#666;\">Carregando fotos...</div>";
+    var fotos = await get("/site_galeria?album_id=eq."+id+"&select=*&order=ordem.asc,criado_em.desc");
+    fotosAtual = fotos||[];
+    var grid=document.getElementById("fotos-grid");
+    if(!fotosAtual.length){
+      grid.innerHTML="<div style=\"grid-column:1/-1;text-align:center;padding:40px;color:#666;\">Nenhuma foto neste álbum.</div>";
+      return;
+    }
+    grid.innerHTML=fotosAtual.map(function(f,i){
+      return "<div class=\"foto-item\" onclick=\"abrirLightbox("+i+")\">"
+        +"<img src=\""+f.url+"\" alt=\""+( f.titulo||"")+"\" loading=\"lazy\" />"
+        +"</div>";
+    }).join("");
+  };
+
+  window.voltarAlbuns = function(){
+    document.getElementById("view-fotos").style.display="none";
+    document.getElementById("view-albuns").style.display="block";
+    fotosAtual=[];
+  };
+
+  window.abrirLightbox = function(idx){
+    lightboxIdx=idx;
+    var f=fotosAtual[idx];
+    document.getElementById("lightbox-img").src=f.url;
+    document.getElementById("lightbox-legenda").textContent=(f.titulo||"")+(f.descricao?" — "+f.descricao:"");
+    document.getElementById("lightbox").classList.add("ativo");
+    document.body.style.overflow="hidden";
+  };
+
+  window.fecharLightbox = function(e){
+    if(e&&(e.target.tagName==="IMG"||e.target.classList.contains("lightbox-nav")||e.target.classList.contains("lightbox-legenda")))return;
+    document.getElementById("lightbox").classList.remove("ativo");
+    document.body.style.overflow="";
+  };
+
+  window.navLightbox = function(dir,e){
+    if(e)e.stopPropagation();
+    lightboxIdx=(lightboxIdx+dir+fotosAtual.length)%fotosAtual.length;
+    abrirLightbox(lightboxIdx);
+  };
+
+  document.addEventListener("keydown",function(e){
+    var lb=document.getElementById("lightbox");
+    if(!lb.classList.contains("ativo"))return;
+    if(e.key==="ArrowRight")navLightbox(1);
+    else if(e.key==="ArrowLeft")navLightbox(-1);
+    else if(e.key==="Escape")fecharLightbox();
+  });
+})();
+</script>
+</body>
+</html>
