@@ -1070,8 +1070,7 @@ function Tesouraria({ user }) {
 
   async function loadLanc() {
     try {
-      // Usar view vw_financeiro que expõe usuario_nome corretamente
-      let qFin="/vw_financeiro?order=data.desc,criado_em.desc&limit=500";
+      let qFin="/financeiro?order=data.desc,criado_em.desc&limit=500";
       if(filtros.projeto)    qFin+=`&projeto=eq.${encodeURIComponent(filtros.projeto)}`;
       if(filtros.dataInicio) qFin+=`&data=gte.${filtros.dataInicio}`;
       if(filtros.dataFim)    qFin+=`&data=lte.${filtros.dataFim}`;
@@ -1081,12 +1080,30 @@ function Tesouraria({ user }) {
       if(filtros.dataInicio) qMens+=`&data_pagamento=gte.${filtros.dataInicio}`;
       if(filtros.dataFim)    qMens+=`&data_pagamento=lte.${filtros.dataFim}`;
 
-      const [finRows, mensRows] = await Promise.all([
+      // Buscar usuario_nome via fetch direto (bypassa cache do supa helper)
+      async function fetchNomes() {
+        try {
+          const r = await fetch(`${SUPA_URL}/rest/v1/financeiro?select=id,usuario_nome&limit=500`, {
+            headers: {
+              apikey: SUPA_KEY,
+              Authorization: `Bearer ${SUPA_KEY}`,
+              "Cache-Control": "no-cache, no-store",
+              "Pragma": "no-cache",
+            }
+          });
+          return await r.json();
+        } catch(_){ return []; }
+      }
+
+      const [finRows, mensRows, nomeRows] = await Promise.all([
         supa(qFin).catch(()=>[]),
         filtros.tipo==="saida" ? Promise.resolve([]) : supa(qMens).catch(()=>[]),
+        fetchNomes(),
       ]);
 
-      const finEnrich = finRows||[];
+      const nm={};
+      (Array.isArray(nomeRows)?nomeRows:[]).forEach(r=>{ if(r.id&&r.usuario_nome) nm[r.id]=r.usuario_nome; });
+      const finEnrich=(finRows||[]).map(r=>({...r,usuario_nome:nm[r.id]||r.usuario_nome||null}));
 
       const mensLanc = (mensRows||[]).map(m=>({
         id:"mens_"+m.id,
