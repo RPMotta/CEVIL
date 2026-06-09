@@ -1070,43 +1070,44 @@ function Tesouraria({ user }) {
 
   async function loadLanc() {
     try {
-      let q="/financeiro?select=id,descricao,tipo,valor,data,categoria,projeto,observacoes,usuario_nome,criado_em&order=data.desc,criado_em.desc&limit=500";
-      if(filtros.tipo==="saida") { // saídas nunca incluem mensalidades
-        if(filtros.projeto)    q+=`&projeto=eq.${encodeURIComponent(filtros.projeto)}`;
-        if(filtros.dataInicio) q+=`&data=gte.${filtros.dataInicio}`;
-        if(filtros.dataFim)    q+=`&data=lte.${filtros.dataFim}`;
-        const r = await supa(q);
-        setLancamentos(r||[]);
-        return;
-      }
-      // Buscar financeiro + mensalidades pagas em paralelo
-      let qFin = q;
+      // Query base sem usuario_nome (evita cache)
+      let qFin="/financeiro?order=data.desc,criado_em.desc&limit=500";
       if(filtros.projeto)    qFin+=`&projeto=eq.${encodeURIComponent(filtros.projeto)}`;
       if(filtros.dataInicio) qFin+=`&data=gte.${filtros.dataInicio}`;
       if(filtros.dataFim)    qFin+=`&data=lte.${filtros.dataFim}`;
-      if(filtros.tipo==="entrada") qFin+=`&tipo=eq.entrada`;
+      if(filtros.tipo&&filtros.tipo!=="todos") qFin+=`&tipo=eq.${filtros.tipo}`;
+
       let qMens = "/mensalidades?pago=eq.true&select=id,valor,mes,ano,data_pagamento,associados(nome)";
       if(filtros.dataInicio) qMens+=`&data_pagamento=gte.${filtros.dataInicio}`;
       if(filtros.dataFim)    qMens+=`&data_pagamento=lte.${filtros.dataFim}`;
-      const [finRows, mensRows] = await Promise.all([
+
+      // Buscar usuario_nome em query separada (select mínimo — força nova requisição sem cache)
+      const [finRows, mensRows, nRows] = await Promise.all([
         supa(qFin).catch(()=>[]),
-        supa(qMens).catch(()=>[]),
+        filtros.tipo==="saida" ? Promise.resolve([]) : supa(qMens).catch(()=>[]),
+        supa("/financeiro?select=id,usuario_nome&limit=500").catch(()=>[]),
       ]);
+
+      // Montar mapa id→usuario_nome
+      const nm={};
+      (nRows||[]).forEach(r=>{ if(r.id&&r.usuario_nome) nm[r.id]=r.usuario_nome; });
+
+      const finEnrich = (finRows||[]).map(r=>({...r, usuario_nome: nm[r.id]||r.usuario_nome||null}));
+
       const mensLanc = (mensRows||[]).map(m=>({
-        id: "mens_"+m.id,
-        descricao: `Mensalidade — ${m.associados?.nome||"Associado"}`,
-        tipo: "entrada",
-        valor: m.valor,
-        data: m.data_pagamento||`${m.ano}-${String(m.mes).padStart(2,"0")}-01`,
-        categoria: "Mensalidade",
-        projeto: null,
-        observacoes: `Ref. ${String(m.mes).padStart(2,"0")}/${m.ano}`,
-        _virtual: true,
+        id:"mens_"+m.id,
+        descricao:`Mensalidade — ${m.associados?.nome||"Associado"}`,
+        tipo:"entrada", valor:m.valor,
+        data:m.data_pagamento||`${m.ano}-${String(m.mes).padStart(2,"0")}-01`,
+        categoria:"Mensalidade", projeto:null,
+        observacoes:`Ref. ${String(m.mes).padStart(2,"0")}/${m.ano}`,
+        usuario_nome:"Sistema", _virtual:true,
       }));
-      const todos = [...(finRows||[]), ...(filtros.tipo==="entrada"||!filtros.tipo?mensLanc:[])]
+
+      const todos = [...finEnrich, ...(filtros.tipo==="saida"?[]:mensLanc)]
         .sort((a,b)=>new Date(b.data)-new Date(a.data));
       setLancamentos(todos);
-    } catch(_){}
+    } catch(e){ console.error("loadLanc:",e); }
   }
 
   useEffect(()=>{
