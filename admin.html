@@ -23,44 +23,59 @@
     @keyframes spin { to { transform: rotate(360deg); } }
 
     /* ── Admin Responsivo ──────────────────────────────────────── */
-    html, body { overflow-x: hidden; }
+    html, body { overflow-x: hidden; max-width: 100vw; }
 
+    /* Hamburger — oculto por padrão no desktop */
     .menu-ham {
-      display: none;
+      display: none !important;
       align-items: center; justify-content: center;
-      width: 36px; height: 36px; min-width: 36px;
+      width: 38px; height: 38px; min-width: 38px;
       background: rgba(255,255,255,.15); border: none;
       border-radius: 6px; color: #fff; font-size: 22px;
-      cursor: pointer;
-    }
-    .sidebar-overlay {
-      display: none; position: fixed; inset: 0;
-      background: rgba(0,0,0,.55); z-index: 98;
+      cursor: pointer; flex-shrink: 0;
     }
 
-    @media (max-width: 900px) {
+    /* Overlay */
+    .sidebar-overlay {
+      display: none !important;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.6); z-index: 998;
+    }
+
+    /* ── TABLET / MOBILE: sidebar vira drawer ── */
+    @media (max-width: 860px) {
+      /* Ocultar sidebar fora da tela */
       .admin-sidebar {
         position: fixed !important;
-        top: 0; left: 0; bottom: 0; height: 100vh;
-        width: 240px !important; z-index: 999;
-        transform: translateX(-100%);
-        transition: transform .28s ease;
+        top: 0 !important; left: 0 !important; bottom: 0 !important;
+        height: 100vh !important;
+        width: 240px !important;
+        z-index: 999 !important;
+        transform: translateX(-100%) !important;
+        transition: transform .28s cubic-bezier(.4,0,.2,1) !important;
+        flex-shrink: 0;
       }
+      /* Aberta */
       .admin-sidebar.aberto {
         transform: translateX(0) !important;
-        box-shadow: 4px 0 30px rgba(0,0,0,.4);
+        box-shadow: 6px 0 32px rgba(0,0,0,.45) !important;
       }
-      .sidebar-overlay.ativo { display: block; }
+      /* Mostrar overlay e hamburger */
+      .sidebar-overlay.ativo { display: block !important; }
       .menu-ham { display: flex !important; }
+
+      /* Main ocupa toda a largura */
+      .admin-main-wrap {
+        margin-left: 0 !important;
+        width: 100% !important;
+        min-width: 0 !important;
+      }
     }
 
-    @media (max-width: 768px) {
+    @media (max-width: 600px) {
       .admin-topbar-info { display: none !important; }
-      .admin-main-area { padding: 14px !important; }
-    }
-
-    @media (max-width: 480px) {
-      .admin-topbar { padding: 0 10px !important; height: 50px !important; }
+      .admin-main-area   { padding: 12px !important; }
+      .admin-topbar      { padding: 0 12px !important; }
     }
   </style>
 </head>
@@ -417,8 +432,9 @@ function Layout({ user, page, setPage, onLogout, children }) {
     <div style={{display:"flex",minHeight:"100vh",background:C.cinzaClaro,fontFamily:"'Open Sans',sans-serif"}}>
 
       {/* Sidebar */}
-      <aside className="admin-sidebar" style={{width:200,background:C.azulEscuro,display:"flex",flexDirection:"column",flexShrink:0,
-        boxShadow:"4px 0 20px rgba(0,0,0,.18)",position:"relative",zIndex:100}}>
+      <aside className="admin-sidebar" style={{width:200,background:C.azulEscuro,
+        display:"flex",flexDirection:"column",flexShrink:0,
+        boxShadow:"4px 0 20px rgba(0,0,0,.18)"}}>
 
         {/* Logo */}
         <div style={{padding:"18px 16px 14px",borderBottom:"1px solid rgba(255,255,255,.1)"}}>
@@ -443,7 +459,16 @@ function Layout({ user, page, setPage, onLogout, children }) {
                   <div style={{padding:"14px 16px 4px",fontSize:9,fontWeight:700,
                     color:"rgba(255,255,255,.35)",letterSpacing:".1em"}}>{item.section}</div>
                 )}
-                <button onClick={()=>setPage(item.id)}
+                <button onClick={()=>{
+                  setPage(item.id);
+                  // Fechar sidebar no mobile
+                  const sb=document.querySelector('.admin-sidebar');
+                  const ov=document.querySelector('.sidebar-overlay');
+                  if(sb&&window.innerWidth<=860){
+                    sb.classList.remove('aberto');
+                    if(ov) ov.classList.remove('ativo');
+                  }
+                }}
                   style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"9px 16px",
                     background: page===item.id?"rgba(255,255,255,.12)":"transparent",
                     border:"none",borderLeft:`3px solid ${page===item.id?C.dourado:"transparent"}`,
@@ -466,11 +491,13 @@ function Layout({ user, page, setPage, onLogout, children }) {
       </aside>
 
       {/* Overlay mobile */}
-      <div className="sidebar-overlay" onClick={()=>document.querySelector('.admin-sidebar').classList.remove('aberto')}
-        style={{display:"none",position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:99}} />
+      <div className="sidebar-overlay" onClick={()=>{
+        document.querySelector('.admin-sidebar').classList.remove('aberto');
+        document.querySelector('.sidebar-overlay').classList.remove('ativo');
+      }} />
 
       {/* Main */}
-      <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      <div className="admin-main-wrap" style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minWidth:0}}>
 
         {/* Topbar — idêntica ao site público */}
         <header style={{background:C.azulEscuro,display:"flex",alignItems:"center",
