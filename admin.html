@@ -1070,8 +1070,8 @@ function Tesouraria({ user }) {
 
   async function loadLanc() {
     try {
-      // Query base sem usuario_nome (evita cache)
-      let qFin="/financeiro?order=data.desc,criado_em.desc&limit=500";
+      // Usar view vw_financeiro que expõe usuario_nome corretamente
+      let qFin="/vw_financeiro?order=data.desc,criado_em.desc&limit=500";
       if(filtros.projeto)    qFin+=`&projeto=eq.${encodeURIComponent(filtros.projeto)}`;
       if(filtros.dataInicio) qFin+=`&data=gte.${filtros.dataInicio}`;
       if(filtros.dataFim)    qFin+=`&data=lte.${filtros.dataFim}`;
@@ -1081,18 +1081,12 @@ function Tesouraria({ user }) {
       if(filtros.dataInicio) qMens+=`&data_pagamento=gte.${filtros.dataInicio}`;
       if(filtros.dataFim)    qMens+=`&data_pagamento=lte.${filtros.dataFim}`;
 
-      // Buscar usuario_nome em query separada (select mínimo — força nova requisição sem cache)
-      const [finRows, mensRows, nRows] = await Promise.all([
+      const [finRows, mensRows] = await Promise.all([
         supa(qFin).catch(()=>[]),
         filtros.tipo==="saida" ? Promise.resolve([]) : supa(qMens).catch(()=>[]),
-        supa("/financeiro?select=id,usuario_nome&limit=500").catch(()=>[]),
       ]);
 
-      // Montar mapa id→usuario_nome
-      const nm={};
-      (nRows||[]).forEach(r=>{ if(r.id&&r.usuario_nome) nm[r.id]=r.usuario_nome; });
-
-      const finEnrich = (finRows||[]).map(r=>({...r, usuario_nome: nm[r.id]||r.usuario_nome||null}));
+      const finEnrich = finRows||[];
 
       const mensLanc = (mensRows||[]).map(m=>({
         id:"mens_"+m.id,
