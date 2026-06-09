@@ -110,43 +110,60 @@ const C = {
 // tesouraria  : acessa Tesouraria + visualização/pesquisa (sem editar cadastros)
 // visualizador: visualiza e pesquisa tudo, EXCETO Tesouraria; não pode editar/excluir
 
+// ─── Perfis ───────────────────────────────────────────────────────────────────
+// super_admin : tudo — configurações, editor site, projetos, usuários, tesouraria, cadastros
+// tesouraria  : tudo MENOS editor do site
+// atendente   : novo cadastro, consultar pessoas, registrar visitas, transparência
+// visualizador: somente consulta de pessoas/visitas e transparência
+
 function usePerfil(user) {
   const p = user?.perfil || "";
+  const SA = p === "super_admin";
+  const TE = p === "tesouraria";
+  const AT = p === "atendente";
+  const VI = p === "visualizador";
   return {
-    isSuperAdmin : p === "super_admin",
-    isTesouraria : p === "tesouraria",
-    isVisualizador: p === "visualizador",
-    // helpers de permissão
-    podeEditar    : p === "super_admin",                        // criar/editar/excluir cadastros
-    podeTesouraria: p === "super_admin" || p === "tesouraria",  // ver módulo financeiro
-    podeUsuarios  : p === "super_admin",                        // gerenciar usuários
-    podeProjetos  : p === "super_admin",                        // criar/editar projetos
-    podeConfigs   : p === "super_admin",                        // ver configurações
-    podeEditarSite: p === "super_admin",                        // editor completo do site
-    podeAssociados: p === "super_admin" || p === "visualizador", // ver associados
-    labelPerfil   : p === "super_admin" ? "Super Admin"
-                  : p === "tesouraria"  ? "Tesouraria"
-                  : "Visualizador",
-    corPerfil     : p === "super_admin" ? "#7c4dbb"
-                  : p === "tesouraria"  ? "#c8992a"
-                  : "#1e5fa8",
+    isSuperAdmin  : SA,
+    isTesouraria  : TE,
+    isAtendente   : AT,
+    isVisualizador: VI,
+    // Cadastros de pessoas
+    podeNovoCadastro : SA || AT,          // criar cadastro
+    podePessoas      : SA || AT || VI,    // consultar pessoas
+    podeRegistrarVisita: SA || AT,        // registrar visita
+    podeRelatorios   : SA || AT,          // relatórios de visitas
+    // Financeiro
+    podeTesouraria   : SA || TE,
+    podeAssociados   : SA || TE,
+    podeTransparencia: SA || TE || AT || VI, // todos veem transparência
+    // Sistema (só super_admin)
+    podeUsuarios     : SA,
+    podeProjetos     : SA,
+    podeConfigs      : SA,
+    podeEditarSite   : SA,
+    // Edição geral (super_admin e tesouraria podem editar o que veem)
+    podeEditar       : SA || TE,
+    labelPerfil : SA ? "Super Admin" : TE ? "Tesouraria" : AT ? "Atendente" : "Visualizador",
+    corPerfil   : SA ? "#7c4dbb" : TE ? "#c8992a" : AT ? "#2d8a4e" : "#1e5fa8",
   };
 }
 
 const NAV_ITEMS = [
-  { id:"dashboard",        label:"Dashboard",        icon:"⊞", section:"PRINCIPAL",  perfis:["super_admin","tesouraria","visualizador"] },
-  { id:"novo-cadastro",    label:"Novo Cadastro",     icon:"＋", section:null,         perfis:["super_admin"] },
-  { id:"pessoas",          label:"Pessoas",           icon:"●", section:null,         perfis:["super_admin","visualizador"] },
-  { id:"registrar-visita", label:"Registrar Visita",  icon:"✎", section:null,         perfis:["super_admin"] },
-  { id:"relatorios",       label:"Relatórios",        icon:"▦", section:null,         perfis:["super_admin","visualizador"] },
-  { id:"tesouraria",       label:"Tesouraria",        icon:"💰", section:null,         perfis:["super_admin","tesouraria"] },
-  { id:"associados",       label:"Associados",        icon:"🤝", section:null,         perfis:["super_admin","visualizador"] },
-  { id:"transparencia-fin", label:"Transparência",     icon:"📢", section:null,         perfis:["super_admin","tesouraria","visualizador"] },
-  { id:"minha-conta",      label:"Minha Conta",       icon:"🔑", section:"SISTEMA",    perfis:["super_admin","tesouraria","visualizador"] },
-  { id:"projetos",         label:"Projetos",          icon:"📋", section:null,         perfis:["super_admin"] },
-  { id:"usuarios",         label:"Usuários",          icon:"🔒", section:null,         perfis:["super_admin"] },
-  { id:"editor-site",      label:"Editor do Site",    icon:"🌐", section:null,         perfis:["super_admin"] },
-  { id:"configuracoes",    label:"Configurações",     icon:"⚙", section:null,         perfis:["super_admin"] },
+  // PRINCIPAL — visível conforme perfil
+  { id:"dashboard",          label:"Dashboard",        icon:"⊞", section:"PRINCIPAL",  perfis:["super_admin","tesouraria","atendente","visualizador"] },
+  { id:"novo-cadastro",      label:"Novo Cadastro",    icon:"＋", section:null,         perfis:["super_admin","atendente"] },
+  { id:"pessoas",            label:"Pessoas",          icon:"●", section:null,         perfis:["super_admin","atendente","visualizador"] },
+  { id:"registrar-visita",   label:"Registrar Visita", icon:"✎", section:null,         perfis:["super_admin","atendente"] },
+  { id:"relatorios",         label:"Relatórios",       icon:"▦", section:null,         perfis:["super_admin","atendente"] },
+  { id:"tesouraria",         label:"Tesouraria",       icon:"💰", section:null,         perfis:["super_admin","tesouraria"] },
+  { id:"associados",         label:"Associados",       icon:"🤝", section:null,         perfis:["super_admin","tesouraria"] },
+  { id:"transparencia-fin",  label:"Transparência",    icon:"📢", section:null,         perfis:["super_admin","tesouraria","atendente","visualizador"] },
+  // SISTEMA — somente super_admin vê projetos/editor/configs/usuários
+  { id:"minha-conta",        label:"Minha Conta",      icon:"🔑", section:"SISTEMA",    perfis:["super_admin","tesouraria","atendente","visualizador"] },
+  { id:"projetos",           label:"Projetos",         icon:"📋", section:null,         perfis:["super_admin"] },
+  { id:"usuarios",           label:"Usuários",         icon:"🔒", section:null,         perfis:["super_admin"] },
+  { id:"editor-site",        label:"Editor do Site",   icon:"🌐", section:null,         perfis:["super_admin"] },
+  { id:"configuracoes",      label:"Configurações",    icon:"⚙", section:null,         perfis:["super_admin"] },
 ];
 
 // ─── Componentes base ───────────────────────────────────────────────────────
@@ -1026,7 +1043,7 @@ function Relatorios() {
 
 // ─── TESOURARIA ──────────────────────────────────────────────────────────────
 
-function Tesouraria() {
+function Tesouraria({ user }) {
   const emptyLanc = {descricao:"",tipo:"entrada",valor:"",data:"",categoria:"",projeto:"",observacoes:""};
   const [lancamentos,setLancamentos] = useState([]);
   const [projetos,setProjetos]       = useState([]);
@@ -1038,8 +1055,18 @@ function Tesouraria() {
   const setF = k=>v=>setForm(p=>({...p,[k]:v}));
   const setFil = k=>v=>setFiltros(p=>({...p,[k]:v}));
 
-  const CATEGORIAS_ENT = ["Doação","Convênio","Projeto","Evento","Patrocínio","Outros"];
-  const CATEGORIAS_SAI = ["Alimentação","Material","Pessoal","Aluguel","Transporte","Serviços","Manutenção","Eventos","Outros"];
+  // Categorias vêm do banco — fallback para lista padrão
+  const [catsEnt, setCatsEnt] = useState(["Doação","Convênio","Projeto","Evento","Patrocínio","Mensalidade","Outros"]);
+  const [catsSai, setCatsSai] = useState(["Alimentação","Material","Pessoal","Aluguel","Transporte","Serviços","Manutenção","Eventos","Outros"]);
+  useEffect(()=>{
+    supa("/fin_categorias?select=nome,tipo&order=nome.asc").then(r=>{
+      if(!Array.isArray(r)||!r.length) return;
+      const ent = r.filter(c=>c.tipo==="entrada").map(c=>c.nome);
+      const sai = r.filter(c=>c.tipo==="saida").map(c=>c.nome);
+      if(ent.length) setCatsEnt(ent);
+      if(sai.length) setCatsSai(sai);
+    }).catch(()=>{});
+  },[]);
 
   async function loadLanc() {
     try {
@@ -1089,13 +1116,14 @@ function Tesouraria() {
 
   async function salvarLanc() {
     if(!form.descricao||!form.valor||!form.data||!form.categoria){showToast("Preencha os campos obrigatórios.","error");return;}
-    const valorNum = parseFloat(form.valor.replace(",","."));
+    const valorNum = parseFloat(String(form.valor).replace(",","."));
     if(isNaN(valorNum)||valorNum<=0){showToast("Valor inválido.","error");return;}
     setLoading(true);
     try {
       await supa("/financeiro",{method:"POST",body:JSON.stringify({
         descricao:form.descricao,tipo:form.tipo,valor:valorNum,data:form.data,
         categoria:form.categoria,projeto:form.projeto||null,observacoes:form.observacoes||null,
+        usuario_nome: user?.nome_completo||user?.usuario||"Sistema",
       })});
       showToast(form.tipo==="entrada"?"Entrada registrada!":"Saída registrada!");
       setForm(emptyLanc);
@@ -1131,7 +1159,7 @@ function Tesouraria() {
   const saldo         = totalEntradas - totalSaidas;
   const fmt = v => v.toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 
-  const categoriasPorTipo = form.tipo==="entrada" ? CATEGORIAS_ENT : CATEGORIAS_SAI;
+  const categoriasPorTipo = form.tipo==="entrada" ? catsEnt : catsSai;
 
   return (
     <div>
@@ -1218,7 +1246,7 @@ function Tesouraria() {
             : <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
                 <thead>
                   <tr style={{background:C.azulEscuro}}>
-                    {["Data","Tipo","Categoria","Descrição","Projeto","Valor","Ações"].map(h=>(
+                    {["Data","Tipo","Categoria","Descrição","Projeto","Valor","Lançado por","Ações"].map(h=>(
                       <th key={h} style={{padding:"9px 10px",textAlign:"left",color:C.branco,fontWeight:700,fontSize:11}}>{h}</th>
                     ))}
                   </tr>
@@ -1250,6 +1278,9 @@ function Tesouraria() {
           }
         </Card>
       )}
+
+      {/* ABA: Categorias */}
+      {aba==="categorias" && <GerenciarCategorias showToast={showToast} onUpdate={(e,s)=>{if(e.length)setCatsEnt(e);if(s.length)setCatsSai(s);}} />}
 
       {/* ABA: Relatório */}
       {aba==="relatorio" && (
@@ -1414,7 +1445,7 @@ function Projetos() {
 
 function Usuarios() {
   const [lista,setLista] = useState([]);
-  const [form,setForm]   = useState({nome_completo:"",usuario:"",senha:"",confirmSenha:"",perfil:"visualizador"});
+  const [form,setForm]   = useState({nome_completo:"",usuario:"",senha:"",confirmSenha:"",perfil:"atendente"});
   const [toast,showToast] = useToast();
 
   async function load(){ const r=await supa("/sistema_usuarios?select=id,nome_completo,usuario,perfil,ativo,criado_em&order=nome_completo.asc"); setLista(r||[]); }
@@ -1428,7 +1459,7 @@ function Usuarios() {
     try {
       await supa("/sistema_usuarios",{method:"POST",body:JSON.stringify({nome_completo,usuario,senha_hash:hashSimple(senha),perfil,ativo:true})});
       showToast("Usuário criado!");
-      setForm({nome_completo:"",usuario:"",senha:"",confirmSenha:"",perfil:"visualizador"});load();
+      setForm({nome_completo:"",usuario:"",senha:"",confirmSenha:"",perfil:"atendente"});load();
     } catch(e){showToast(e.message.includes("unique")?"Usuário já existe.":"Erro.","error");}
   }
 
@@ -1454,7 +1485,7 @@ function Usuarios() {
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
             <Input label="Confirmar Senha" value={form.confirmSenha} onChange={v=>setForm(p=>({...p,confirmSenha:v}))} type="password" required />
             <Select label="Perfil" value={form.perfil} onChange={v=>setForm(p=>({...p,perfil:v}))} required
-              options={[{value:"visualizador",label:"👁 Visualizador"},{value:"tesouraria",label:"💰 Tesouraria"},{value:"super_admin",label:"👑 Super Admin"}]} />
+              options={[{value:"visualizador",label:"👁 Visualizador"},{value:"atendente",label:"🤝 Atendente"},{value:"tesouraria",label:"💰 Tesouraria"},{value:"super_admin",label:"👑 Super Admin"}]} />
           </div>
         </div>
         <div style={{marginTop:16}}><Btn onClick={criar} color="#7c4dbb">+ Criar Usuário</Btn></div>
@@ -1531,7 +1562,7 @@ function MinhaConta({ user }) {
           <div style={{fontSize:14,lineHeight:2.2}}>
             <div><strong>Nome:</strong> {user.nome_completo}</div>
             <div><strong>Usuário:</strong> {user.usuario}</div>
-            <div><strong>Perfil:</strong> {user.perfil==="super_admin"?"Super Admin":user.perfil==="tesouraria"?"Tesouraria":"Visualizador"}</div>
+            <div><strong>Perfil:</strong> {user.perfil==="super_admin"?"Super Admin":user.perfil==="tesouraria"?"Tesouraria":user.perfil==="atendente"?"Atendente":"Visualizador"}</div>
           </div>
         </Card>
         <Card>
@@ -1750,6 +1781,92 @@ CREATE TABLE IF NOT EXISTS mensalidades (
 
 ALTER TABLE associados   DISABLE ROW LEVEL SECURITY;
 ALTER TABLE mensalidades DISABLE ROW LEVEL SECURITY;`;
+
+
+// ─── Gerenciar Categorias ────────────────────────────────────────────────────
+
+function GerenciarCategorias({ showToast, onUpdate }) {
+  const [lista, setLista]   = useState([]);
+  const [form, setForm]     = useState({nome:"", tipo:"entrada"});
+  const [loading, setLoading] = useState(false);
+
+  async function load() {
+    const r = await supa("/fin_categorias?select=*&order=tipo.asc,nome.asc").catch(()=>[]);
+    setLista(r||[]);
+    // Notificar Tesouraria para atualizar listas de categorias
+    if(onUpdate) {
+      const ent=(r||[]).filter(c=>c.tipo==="entrada").map(c=>c.nome);
+      const sai=(r||[]).filter(c=>c.tipo==="saida").map(c=>c.nome);
+      onUpdate(ent, sai);
+    }
+  }
+  useEffect(()=>{load();},[]);
+
+  async function salvar() {
+    if(!form.nome.trim()){showToast("Nome obrigatório.","error");return;}
+    setLoading(true);
+    try {
+      await supa("/fin_categorias",{method:"POST",body:JSON.stringify({nome:form.nome.trim(),tipo:form.tipo})});
+      showToast("Categoria adicionada!"); setForm({nome:"",tipo:"entrada"}); load();
+    } catch(e){showToast(e.message.includes("unique")?"Categoria já existe.":"Erro.","error");}
+    finally{setLoading(false);}
+  }
+
+  async function excluir(id,nome) {
+    if(!confirm(`Excluir a categoria "${nome}"?`)) return;
+    await supa(`/fin_categorias?id=eq.${id}`,{method:"DELETE",prefer:""});
+    showToast("Categoria removida."); load();
+  }
+
+  const ents = lista.filter(c=>c.tipo==="entrada");
+  const sais = lista.filter(c=>c.tipo==="saida");
+
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"320px 1fr",gap:24,alignItems:"start"}}>
+      <Card>
+        <SecaoTitulo icon="➕">Nova Categoria</SecaoTitulo>
+        <div style={{display:"flex",flexDirection:"column",gap:13}}>
+          <Input label="Nome *" value={form.nome} onChange={v=>setForm(p=>({...p,nome:v}))} placeholder="Ex: Doação, Aluguel..." required />
+          <Select label="Tipo *" value={form.tipo} onChange={v=>setForm(p=>({...p,tipo:v}))}
+            options={[{value:"entrada",label:"✅ Entrada"},{value:"saida",label:"❌ Saída"}]} />
+          <Btn onClick={salvar} disabled={loading} color={C.azulMedio}>{loading?"Salvando...":"➕ Adicionar Categoria"}</Btn>
+        </div>
+        <div style={{marginTop:20,background:C.cinzaClaro,borderRadius:6,padding:"12px 14px",fontSize:12,color:C.cinzaMedio,lineHeight:1.7}}>
+          💡 As categorias cadastradas aqui aparecem nos selects de <strong>Novo Lançamento</strong> da Tesouraria.
+        </div>
+      </Card>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20}}>
+        <Card>
+          <SecaoTitulo icon="📥">Categorias de Entrada ({ents.length})</SecaoTitulo>
+          {ents.length===0
+            ? <p style={{fontSize:13,color:C.cinzaMedio}}>Nenhuma categoria. Adicione ao lado.</p>
+            : ents.map(c=>(
+              <div key={c.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+                padding:"9px 12px",borderBottom:`1px solid ${C.cinzaClaro}`,borderRadius:4}}>
+                <span style={{fontSize:13,color:C.azulEscuro,fontWeight:600}}>{c.nome}</span>
+                <Btn small outline color={C.vermelho} onClick={()=>excluir(c.id,c.nome)}>🗑</Btn>
+              </div>
+            ))
+          }
+        </Card>
+        <Card>
+          <SecaoTitulo icon="📤">Categorias de Saída ({sais.length})</SecaoTitulo>
+          {sais.length===0
+            ? <p style={{fontSize:13,color:C.cinzaMedio}}>Nenhuma categoria. Adicione ao lado.</p>
+            : sais.map(c=>(
+              <div key={c.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+                padding:"9px 12px",borderBottom:`1px solid ${C.cinzaClaro}`,borderRadius:4}}>
+                <span style={{fontSize:13,color:C.azulEscuro,fontWeight:600}}>{c.nome}</span>
+                <Btn small outline color={C.vermelho} onClick={()=>excluir(c.id,c.nome)}>🗑</Btn>
+              </div>
+            ))
+          }
+        </Card>
+      </div>
+    </div>
+  );
+}
 
 
 // ─── TRANSPARÊNCIA FINANCEIRA ─────────────────────────────────────────────────
@@ -3455,7 +3572,7 @@ function App() {
 
   if(!user) return <Login onLogin={setUser} />;
 
-  const { podeEditar, podeTesouraria, podeUsuarios, podeProjetos, podeConfigs, podeEditarSite, podeAssociados } = usePerfil(user);
+  const { podeNovoCadastro, podePessoas, podeRegistrarVisita, podeRelatorios, podeTesouraria, podeAssociados, podeTransparencia, podeUsuarios, podeProjetos, podeConfigs, podeEditarSite, podeEditar } = usePerfil(user);
 
   function Bloqueado({ msg }) {
     return (
@@ -3469,21 +3586,21 @@ function App() {
 
   function renderPage(){
     switch(page){
-      case "dashboard":        return <Dashboard setPage={setPage} />;
-      case "novo-cadastro":    return podeEditar     ? <NovoCadastro onSaved={()=>setPage("pessoas")} />   : <Bloqueado msg="Somente o Super Admin pode cadastrar pessoas." />;
-      case "pessoas":          return                  <Pessoas setPage={setPage} setPessoaId={setPessoaId} user={user} />;
-      case "perfil-pessoa":    return                  <PerfilPessoa pessoaId={pessoaId} setPage={setPage} user={user} />;
-      case "registrar-visita": return podeEditar     ? <RegistrarVisita />                                 : <Bloqueado msg="Somente o Super Admin pode registrar visitas." />;
-      case "relatorios":       return                  <Relatorios />;
-      case "tesouraria":       return podeTesouraria ? <Tesouraria />                                      : <Bloqueado msg="Esta área é exclusiva para Tesouraria e Super Admin." />;
-      case "minha-conta":      return                  <MinhaConta user={user} />;
-      case "projetos":         return podeProjetos   ? <Projetos />                                        : <Bloqueado msg="Somente o Super Admin pode gerenciar projetos." />;
-      case "usuarios":         return podeUsuarios   ? <Usuarios />                                        : <Bloqueado msg="Somente o Super Admin pode gerenciar usuários." />;
-      case "configuracoes":    return podeConfigs    ? <Configuracoes />                                   : <Bloqueado msg="Somente o Super Admin pode acessar as configurações." />;
-      case "associados":       return podeAssociados  ? <Associados user={user} />                         : <Bloqueado msg="Acesso negado." />;
-      case "transparencia-fin": return <TransparenciaFinanceira />;
-      case "editor-site":     return podeEditarSite ? <EditorSite />                                      : <Bloqueado msg="Somente o Super Admin pode editar o site." />;
-      default:                 return <Dashboard setPage={setPage} />;
+      case "dashboard":         return <Dashboard setPage={setPage} />;
+      case "novo-cadastro":     return podeNovoCadastro    ? <NovoCadastro onSaved={()=>setPage("pessoas")} />           : <Bloqueado msg="Seu perfil não permite cadastrar pessoas." />;
+      case "pessoas":           return podePessoas         ? <Pessoas setPage={setPage} setPessoaId={setPessoaId} user={user} /> : <Bloqueado msg="Acesso negado." />;
+      case "perfil-pessoa":     return podePessoas         ? <PerfilPessoa pessoaId={pessoaId} setPage={setPage} user={user} /> : <Bloqueado msg="Acesso negado." />;
+      case "registrar-visita":  return podeRegistrarVisita ? <RegistrarVisita user={user} />                             : <Bloqueado msg="Seu perfil não permite registrar visitas." />;
+      case "relatorios":        return podeRelatorios      ? <Relatorios />                                               : <Bloqueado msg="Acesso negado." />;
+      case "tesouraria":        return podeTesouraria      ? <Tesouraria user={user} />                                   : <Bloqueado msg="Área exclusiva para Tesouraria e Super Admin." />;
+      case "associados":        return podeAssociados      ? <Associados user={user} />                                   : <Bloqueado msg="Acesso negado." />;
+      case "transparencia-fin": return podeTransparencia   ? <TransparenciaFinanceira />                                  : <Bloqueado msg="Acesso negado." />;
+      case "minha-conta":       return                       <MinhaConta user={user} />;
+      case "projetos":          return podeProjetos        ? <Projetos />                                                 : <Bloqueado msg="Somente Super Admin gerencia projetos." />;
+      case "usuarios":          return podeUsuarios        ? <Usuarios />                                                 : <Bloqueado msg="Somente Super Admin gerencia usuários." />;
+      case "configuracoes":     return podeConfigs         ? <Configuracoes />                                            : <Bloqueado msg="Somente Super Admin acessa configurações." />;
+      case "editor-site":       return podeEditarSite      ? <EditorSite />                                               : <Bloqueado msg="Somente Super Admin edita o site." />;
+      default:                  return <Dashboard setPage={setPage} />;
     }
   }
 
