@@ -147,8 +147,9 @@ function Input({ label, value, onChange, placeholder, type="text", required, rea
   return (
     <div style={{display:"flex",flexDirection:"column",gap:4}}>
       {label && <label style={{fontSize:12,fontWeight:600,color:C.cinzaEscuro}}>{label}{required&&<span style={{color:C.vermelho}}> *</span>}</label>}
-      <input type={type} value={value} onChange={e=>onChange(e.target.value)} onBlur={onBlur} placeholder={placeholder} readOnly={readOnly}
-        style={{border:`1.5px solid #ddd`,borderRadius:5,padding:"10px 12px",fontSize:13,
+      <input type={type} value={value??""} onChange={e=>onChange(e.target.value)} onBlur={onBlur}
+        placeholder={placeholder} readOnly={readOnly}
+        style={{border:"1.5px solid #ddd",borderRadius:5,padding:"10px 12px",fontSize:13,
           background:readOnly?C.cinzaClaro:C.branco,color:C.cinzaEscuro,outline:"none",
           width:"100%",boxSizing:"border-box",fontFamily:"inherit"}} />
     </div>
@@ -159,8 +160,8 @@ function Select({ label, value, onChange, options, required }) {
   return (
     <div style={{display:"flex",flexDirection:"column",gap:4}}>
       {label && <label style={{fontSize:12,fontWeight:600,color:C.cinzaEscuro}}>{label}{required&&<span style={{color:C.vermelho}}> *</span>}</label>}
-      <select value={value} onChange={e=>onChange(e.target.value)}
-        style={{border:`1.5px solid #ddd`,borderRadius:5,padding:"10px 12px",fontSize:13,
+      <select value={value??""} onChange={e=>onChange(e.target.value)}
+        style={{border:"1.5px solid #ddd",borderRadius:5,padding:"10px 12px",fontSize:13,
           background:C.branco,color:C.cinzaEscuro,outline:"none",width:"100%",cursor:"pointer",fontFamily:"inherit"}}>
         {options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
@@ -172,8 +173,8 @@ function Textarea({ label, value, onChange, placeholder, rows=4 }) {
   return (
     <div style={{display:"flex",flexDirection:"column",gap:4}}>
       {label&&<label style={{fontSize:12,fontWeight:600,color:C.cinzaEscuro}}>{label}</label>}
-      <textarea value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} rows={rows}
-        style={{border:`1.5px solid #ddd`,borderRadius:5,padding:"10px 12px",fontSize:13,
+      <textarea value={value??""} onChange={e=>onChange(e.target.value)} placeholder={placeholder} rows={rows}
+        style={{border:"1.5px solid #ddd",borderRadius:5,padding:"10px 12px",fontSize:13,
           background:C.branco,color:C.cinzaEscuro,outline:"none",resize:"vertical",
           fontFamily:"inherit",width:"100%",boxSizing:"border-box"}} />
     </div>
@@ -182,6 +183,17 @@ function Textarea({ label, value, onChange, placeholder, rows=4 }) {
 
 function Card({ children, style={} }) {
   return <div style={{background:C.branco,border:`1px solid #e8e8e8`,borderRadius:10,padding:"24px 28px",...style}}>{children}</div>;
+}
+
+// Grids reutilizáveis — definidos fora de qualquer componente para evitar re-mount
+function Grid2({ children, gap=14 }) {
+  return <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap}}>{children}</div>;
+}
+function Grid3({ children, gap=14 }) {
+  return <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap}}>{children}</div>;
+}
+function Grid4({ children, gap=14 }) {
+  return <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap}}>{children}</div>;
 }
 
 function SecaoTitulo({ icon, children }) {
@@ -532,7 +544,7 @@ function NovoCadastro({ onSaved }) {
     } finally{setLoading(false);}
   }
 
-  const Row2 = ({children}) => <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>{children}</div>;
+  // Row2 removido — usa Grid2 global
 
   return (
     <div>
@@ -543,10 +555,10 @@ function NovoCadastro({ onSaved }) {
         <SecaoTitulo icon="👤">Dados Pessoais</SecaoTitulo>
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
           <Input label="Nome Completo" value={f.nome_completo} onChange={set("nome_completo")} placeholder="Ex: Maria Aparecida da Silva" required />
-          <Row2>
+          <Grid2>
             <Input label="CPF" value={f.cpf} onChange={set("cpf")} placeholder="000.000.000-00" required />
             <Input label="Data de Nascimento" value={f.data_nascimento} onChange={set("data_nascimento")} type="date" />
-          </Row2>
+          </Grid2>
         </div>
       </Card>
 
@@ -559,40 +571,40 @@ function NovoCadastro({ onSaved }) {
             <Input label="Número" value={f.numero} onChange={set("numero")} placeholder="123" required />
           </div>
           <Input label="Rua / Logradouro" value={f.rua} onChange={set("rua")} placeholder="Preenchido pelo CEP" required />
-          <Row2>
+          <Grid2>
             <Input label="Complemento" value={f.complemento} onChange={set("complemento")} placeholder="Apto, Bloco..." />
             <Input label="Bairro" value={f.bairro} onChange={set("bairro")} placeholder="Preenchido pelo CEP" required />
-          </Row2>
-          <Row2>
+          </Grid2>
+          <Grid2>
             <Input label="Cidade" value={f.cidade} onChange={set("cidade")} placeholder="Preenchido pelo CEP" required />
             <Select label="Estado" value={f.estado} onChange={set("estado")} required
               options={[{value:"",label:"Selecione..."},...ESTADOS.map(e=>({value:e,label:e}))]} />
-          </Row2>
+          </Grid2>
         </div>
       </Card>
 
       <Card style={{marginBottom:20}}>
         <SecaoTitulo icon="📞">Contato</SecaoTitulo>
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
-          <Row2>
+          <Grid2>
             <Input label="Telefone / WhatsApp" value={f.telefone} onChange={set("telefone")} placeholder="(48) 99999-9999" />
             <Input label="E-mail" value={f.email} onChange={set("email")} placeholder="email@exemplo.com" type="email" />
-          </Row2>
-          <Row2>
+          </Grid2>
+          <Grid2>
             <Input label="Nome — Emergência" value={f.emerg_nome} onChange={set("emerg_nome")} placeholder="Ex: João Silva" />
             <Input label="Tel — Emergência" value={f.emerg_telefone} onChange={set("emerg_telefone")} placeholder="(48) 98888-8888" />
-          </Row2>
+          </Grid2>
         </div>
       </Card>
 
       <Card style={{marginBottom:24}}>
         <SecaoTitulo icon="🗓">Primeira Visita</SecaoTitulo>
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
-          <Row2>
+          <Grid2>
             <Select label="Projeto" value={f.projeto} onChange={set("projeto")} required
               options={[{value:"",label:"Selecione..."},...projetos.map(p=>({value:p.nome,label:p.nome}))]} />
             <Input label="Data da Visita" value={f.data_visita} onChange={set("data_visita")} type="date" required />
-          </Row2>
+          </Grid2>
           <Textarea label="Observações" value={f.observacoes} onChange={set("observacoes")} placeholder="Informações adicionais..." />
         </div>
       </Card>
@@ -1979,7 +1991,14 @@ function ListaAssociados({ setAba, showToast, user }) {
         rows = rows.filter(a => a.nome?.toLowerCase().includes(b) || a.cpf?.includes(busca) || a.matricula?.includes(busca));
       }
       setLista(rows);
-    } catch(e) { showToast("Erro ao carregar.", "error"); }
+    } catch(e) {
+      if (e.message?.includes("relation") || e.message?.includes("does not exist")) {
+        showToast("Execute o SQL de criação das tabelas no Supabase.", "error");
+      } else {
+        showToast("Erro ao carregar: " + e.message, "error");
+      }
+      setLista([]);
+    }
     finally { setLoading(false); }
   }
 
@@ -2204,8 +2223,8 @@ function CadastrarAssociado({ setAba, showToast }) {
     finally{setLoading(false);}
   }
 
-  const Row2 = ({children})=><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>{children}</div>;
-  const Row3 = ({children})=><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:14}}>{children}</div>;
+  // Row2 removido — usa Grid2 global
+  // Row3 removido — usa Grid3 global
 
   return (
     <div>
@@ -2213,14 +2232,14 @@ function CadastrarAssociado({ setAba, showToast }) {
         <SecaoTitulo icon="👤">Dados Pessoais</SecaoTitulo>
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
           <Input label="Nome Completo *" value={f.nome} onChange={set("nome")} placeholder="Nome completo do associado" required />
-          <Row2>
+          <Grid2>
             <Input label="CPF" value={f.cpf} onChange={set("cpf")} placeholder="000.000.000-00" />
             <Input label="Data de Nascimento" value={f.data_nascimento} onChange={set("data_nascimento")} type="date" />
-          </Row2>
-          <Row2>
+          </Grid2>
+          <Grid2>
             <Input label="Telefone / WhatsApp" value={f.telefone} onChange={set("telefone")} placeholder="(48) 99999-9999" />
             <Input label="E-mail" value={f.email} onChange={set("email")} placeholder="email@exemplo.com" />
-          </Row2>
+          </Grid2>
         </div>
       </Card>
 
@@ -2228,22 +2247,22 @@ function CadastrarAssociado({ setAba, showToast }) {
         <SecaoTitulo icon="📍">Endereço</SecaoTitulo>
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
           <Input label="Endereço (Rua + Número)" value={f.endereco} onChange={set("endereco")} placeholder="Rua das Flores, 123" />
-          <Row3>
+          <Grid3>
             <Input label="Bairro" value={f.bairro} onChange={set("bairro")} placeholder="Bairro" />
             <Input label="Cidade" value={f.cidade} onChange={set("cidade")} placeholder="Cidade" />
             <Input label="CEP" value={f.cep} onChange={set("cep")} placeholder="00000-000" />
-          </Row3>
+          </Grid3>
         </div>
       </Card>
 
       <Card style={{marginBottom:20}}>
         <SecaoTitulo icon="💳">Filiação e Mensalidade</SecaoTitulo>
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
-          <Row3>
+          <Grid3>
             <Input label="Plano / Categoria" value={f.plano} onChange={set("plano")} placeholder="Ex: Titular, Dependente..." />
             <Input label="Valor Mensalidade (R$)" value={f.valor_mensalidade} onChange={set("valor_mensalidade")} placeholder="0,00" type="number" />
             <Input label="Data de Filiação" value={f.data_filiacao} onChange={set("data_filiacao")} type="date" />
-          </Row3>
+          </Grid3>
           <Select label="Status" value={f.status} onChange={set("status")}
             options={[{value:"ativo",label:"✅ Ativo"},{value:"inativo",label:"⏸ Inativo"},{value:"suspenso",label:"⚠️ Suspenso"}]} />
           <Textarea label="Observações" value={f.observacoes} onChange={set("observacoes")} placeholder="Informações adicionais..." rows={3} />
@@ -3112,6 +3131,32 @@ function Configuracoes() {
 
 // ─── APP ROOT ────────────────────────────────────────────────────────────────
 
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { hasError: false, error: null }; }
+  static getDerivedStateFromError(error) { return { hasError: true, error }; }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{minHeight:"100vh",background:"#1a3a5c",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"sans-serif"}}>
+          <div style={{background:"#fff",borderRadius:12,padding:"40px 48px",maxWidth:520,textAlign:"center"}}>
+            <div style={{fontSize:48,marginBottom:16}}>⚠️</div>
+            <h2 style={{color:"#1a3a5c",marginBottom:12}}>Erro no sistema</h2>
+            <p style={{color:"#666",fontSize:14,marginBottom:24,lineHeight:1.6}}>
+              {this.state.error?.message || "Erro desconhecido"}
+            </p>
+            <button onClick={()=>window.location.reload()}
+              style={{background:"#c8992a",color:"#fff",border:"none",padding:"10px 28px",
+                borderRadius:5,fontWeight:700,fontSize:14,cursor:"pointer"}}>
+              Recarregar
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function App() {
   const [user,setUser]       = useState(null);
   const [page,setPage]       = useState("dashboard");
@@ -3158,9 +3203,9 @@ function App() {
   );
 }
 
-// Montar o app
+// Montar o app com ErrorBoundary
 const _root = ReactDOM.createRoot(document.getElementById('root'));
-_root.render(React.createElement(App));
+_root.render(React.createElement(ErrorBoundary, null, React.createElement(App)));
   </script>
 
   <script>
