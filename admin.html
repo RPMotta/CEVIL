@@ -34,7 +34,7 @@
 
   <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
   <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
 
   <script type="text/babel">
 const { useState, useEffect } = React;
@@ -401,9 +401,21 @@ function Dashboard({ setPage }) {
         ]);
         const now = new Date();
         const mesK = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}`;
+        // Buscar mensalidades pagas e lançamentos financeiros para o mês atual
+        let mensalidasMes = 0, entradasMes = 0, saidasMes = 0;
+        try {
+          const [mRows, fRows] = await Promise.all([
+            supa(`/mensalidades?pago=eq.true&mes=eq.${now.getMonth()+1}&ano=eq.${now.getFullYear()}&select=valor`),
+            supa(`/financeiro?data=gte.${mesK}-01&data=lte.${mesK}-31&select=tipo,valor`),
+          ]);
+          mensalidasMes = (mRows||[]).reduce((s,m)=>s+Number(m.valor||0),0);
+          entradasMes = (fRows||[]).filter(f=>f.tipo==="entrada").reduce((s,f)=>s+Number(f.valor||0),0) + mensalidasMes;
+          saidasMes   = (fRows||[]).filter(f=>f.tipo==="saida").reduce((s,f)=>s+Number(f.valor||0),0);
+        } catch(_){}
         setStats({pessoas:(pRows||[]).length,visitas:(vRows||[]).length,
           visitasMes:(vRows||[]).filter(v=>v.data_visita?.startsWith(mesK)).length,
-          projetos:(prRows||[]).length});
+          projetos:(prRows||[]).length,
+          entradasMes, saidasMes, mensalidasMes, saldoMes: entradasMes - saidasMes});
         const pp={};
         (vRows||[]).forEach(v=>{pp[v.projeto]=(pp[v.projeto]||0)+1;});
         setPP(Object.entries(pp).map(([n,c])=>({nome:n,count:c})).sort((a,b)=>b.count-a.count).slice(0,5));
@@ -422,17 +434,22 @@ function Dashboard({ setPage }) {
   },[]);
 
   const maxMes = Math.max(...porMes.map(m=>m.count),1);
+  const fmt = v => Number(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
   const cards = [
-    {label:"PESSOAS",    value:stats.pessoas,    color:C.azulMedio},
-    {label:"TOTAL VISITAS", value:stats.visitas,  color:"#e07020"},
-    {label:"VISITAS MÊS",   value:stats.visitasMes,color:C.azulClaro},
-    {label:"PROJETOS ATIVOS",value:stats.projetos,color:"#7c4dbb"},
+    {label:"PESSOAS",         value:stats.pessoas,                                color:C.azulMedio},
+    {label:"TOTAL VISITAS",   value:stats.visitas,                                color:"#e07020"},
+    {label:"VISITAS MÊS",     value:stats.visitasMes,                             color:C.azulClaro},
+    {label:"PROJETOS ATIVOS", value:stats.projetos,                               color:"#7c4dbb"},
+    {label:"ENTRADAS MÊS",    value:fmt(stats.entradasMes||0), isMoney:true,      color:C.verde},
+    {label:"SAÍDAS MÊS",      value:fmt(stats.saidasMes||0),   isMoney:true,      color:C.vermelho},
+    {label:"MENSALIDADES PAGAS MÊS", value:fmt(stats.mensalidasMes||0), isMoney:true, color:C.dourado},
+    {label:"SALDO MÊS",       value:fmt(stats.saldoMes||0),    isMoney:true,      color:(stats.saldoMes||0)>=0?C.verde:C.vermelho},
   ];
 
   return (
     <div>
       <PageHeader title="Dashboard" subtitle="Visão geral da associação" />
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:16,marginBottom:24}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:16,marginBottom:24,gridTemplateRows:"auto auto"}}>
         {cards.map(s=>(
           <div key={s.label} style={{background:C.branco,borderLeft:`4px solid ${s.color}`,
             borderRadius:10,padding:"20px 20px 16px",boxShadow:"0 2px 8px rgba(0,0,0,.07)"}}>
@@ -980,13 +997,42 @@ function Tesouraria() {
 
   async function loadLanc() {
     try {
-      let q="/financeiro?select=*&order=data.desc&limit=200";
-      if(filtros.tipo)       q+=`&tipo=eq.${filtros.tipo}`;
-      if(filtros.projeto)    q+=`&projeto=eq.${encodeURIComponent(filtros.projeto)}`;
-      if(filtros.dataInicio) q+=`&data=gte.${filtros.dataInicio}`;
-      if(filtros.dataFim)    q+=`&data=lte.${filtros.dataFim}`;
-      const r = await supa(q);
-      setLancamentos(r||[]);
+      let q="/financeiro?select=*&order=data.desc&limit=500";
+      if(filtros.tipo==="saida") { // saídas nunca incluem mensalidades
+        if(filtros.projeto)    q+=`&projeto=eq.${encodeURIComponent(filtros.projeto)}`;
+        if(filtros.dataInicio) q+=`&data=gte.${filtros.dataInicio}`;
+        if(filtros.dataFim)    q+=`&data=lte.${filtros.dataFim}`;
+        const r = await supa(q);
+        setLancamentos(r||[]);
+        return;
+      }
+      // Buscar financeiro + mensalidades pagas em paralelo
+      let qFin = q;
+      if(filtros.projeto)    qFin+=`&projeto=eq.${encodeURIComponent(filtros.projeto)}`;
+      if(filtros.dataInicio) qFin+=`&data=gte.${filtros.dataInicio}`;
+      if(filtros.dataFim)    qFin+=`&data=lte.${filtros.dataFim}`;
+      if(filtros.tipo==="entrada") qFin+=`&tipo=eq.entrada`;
+      let qMens = "/mensalidades?pago=eq.true&select=id,valor,mes,ano,data_pagamento,associados(nome)";
+      if(filtros.dataInicio) qMens+=`&data_pagamento=gte.${filtros.dataInicio}`;
+      if(filtros.dataFim)    qMens+=`&data_pagamento=lte.${filtros.dataFim}`;
+      const [finRows, mensRows] = await Promise.all([
+        supa(qFin).catch(()=>[]),
+        supa(qMens).catch(()=>[]),
+      ]);
+      const mensLanc = (mensRows||[]).map(m=>({
+        id: "mens_"+m.id,
+        descricao: `Mensalidade — ${m.associados?.nome||"Associado"}`,
+        tipo: "entrada",
+        valor: m.valor,
+        data: m.data_pagamento||`${m.ano}-${String(m.mes).padStart(2,"0")}-01`,
+        categoria: "Mensalidade",
+        projeto: null,
+        observacoes: `Ref. ${String(m.mes).padStart(2,"0")}/${m.ano}`,
+        _virtual: true,
+      }));
+      const todos = [...(finRows||[]), ...(filtros.tipo==="entrada"||!filtros.tipo?mensLanc:[])]
+        .sort((a,b)=>new Date(b.data)-new Date(a.data));
+      setLancamentos(todos);
     } catch(_){}
   }
 
@@ -1012,6 +1058,7 @@ function Tesouraria() {
   }
 
   async function excluirLanc(id) {
+    if(String(id).startsWith("mens_")){showToast("Mensalidades são gerenciadas no módulo Associados.","error");return;}
     if(!confirm("Excluir este lançamento?")) return;
     try {
       await supa(`/financeiro?id=eq.${id}`,{method:"DELETE",prefer:""});
@@ -1664,8 +1711,22 @@ function TransparenciaFinanceira() {
   async function load() {
     setLoading(true);
     try {
-      const r = await supa("/financeiro?select=*&order=data.asc");
-      setLancamentos(r || []);
+      const [finRows, mensRows] = await Promise.all([
+        supa("/financeiro?select=*&order=data.asc").catch(()=>[]),
+        supa("/mensalidades?pago=eq.true&select=id,valor,mes,ano,data_pagamento,associados(nome)").catch(()=>[]),
+      ]);
+      const mensLanc = (mensRows||[]).map(m => ({
+        id: "mens_"+m.id,
+        descricao: `Mensalidade — ${m.associados?.nome||"Associado"}`,
+        tipo: "entrada",
+        valor: m.valor,
+        data: m.data_pagamento || `${m.ano}-${String(m.mes).padStart(2,"0")}-01`,
+        categoria: "Mensalidade",
+        projeto: null,
+        observacoes: `Ref. ${String(m.mes).padStart(2,"0")}/${m.ano}`,
+      }));
+      const todos = [...(finRows||[]), ...mensLanc].sort((a,b) => new Date(a.data) - new Date(b.data));
+      setLancamentos(todos);
     } catch(_) {}
     finally { setLoading(false); }
   }
@@ -2186,7 +2247,7 @@ function FichaAssociado({ associado, onClose, showToast, reload, user }) {
 }
 
 function CadastrarAssociado({ setAba, showToast }) {
-  const empty = {nome:"",cpf:"",data_nascimento:"",telefone:"",email:"",endereco:"",bairro:"",cidade:"SC",estado:"SC",cep:"",plano:"",valor_mensalidade:"",data_filiacao:new Date().toISOString().split("T")[0],status:"ativo",observacoes:""};
+  const empty = {nome:"",cpf:"",data_nascimento:"",telefone:"",email:"",endereco:"",bairro:"",cidade:"SC",estado:"SC",cep:"",plano:"",valor_mensalidade:"",data_filiacao:new Date().toISOString().split("T")[0],data_inicio_mensalidade:new Date().toISOString().split("T")[0].slice(0,7),status:"ativo",observacoes:""};
   const [f, setF] = useState(empty);
   const [loading, setLoading] = useState(false);
   const set = k => v => setF(p=>({...p,[k]:v}));
@@ -2204,16 +2265,22 @@ function CadastrarAssociado({ setAba, showToast }) {
       const matricula = gerarMatricula();
       const assoc = await supa("/associados",{method:"POST",body:JSON.stringify({...f,matricula,valor_mensalidade:Number(f.valor_mensalidade)||0})});
       const id = assoc[0].id;
-      // Gerar mensalidades dos próximos 12 meses
-      if (f.valor_mensalidade && Number(f.valor_mensalidade) > 0) {
+      // Gerar mensalidades desde data_inicio até hoje
+      if (f.valor_mensalidade && Number(f.valor_mensalidade) > 0 && f.data_inicio_mensalidade) {
+        const [anoIni, mesIni] = f.data_inicio_mensalidade.split("-").map(Number);
         const hoje = new Date();
+        const anoFim = hoje.getFullYear();
+        const mesFim = hoje.getMonth() + 1;
+        let ano = anoIni, mes = mesIni;
         const mensItems = [];
-        for (let i=0; i<12; i++) {
-          const d = new Date(hoje.getFullYear(), hoje.getMonth()+i, 1);
-          mensItems.push({associado_id:id, mes:d.getMonth()+1, ano:d.getFullYear(), valor:Number(f.valor_mensalidade), pago:false});
+        while (ano < anoFim || (ano === anoFim && mes <= mesFim)) {
+          mensItems.push({associado_id:id, mes, ano, valor:Number(f.valor_mensalidade), pago:false});
+          mes++;
+          if (mes > 12) { mes = 1; ano++; }
+          if (mensItems.length > 600) break; // segurança: max 50 anos
         }
         for (const m of mensItems) {
-          await supa("/mensalidades",{method:"POST",body:JSON.stringify(m)});
+          try { await supa("/mensalidades",{method:"POST",body:JSON.stringify(m)}); } catch(_){}
         }
       }
       showToast("Associado cadastrado com matrícula "+matricula+"!");
@@ -2258,11 +2325,24 @@ function CadastrarAssociado({ setAba, showToast }) {
       <Card style={{marginBottom:20}}>
         <SecaoTitulo icon="💳">Filiação e Mensalidade</SecaoTitulo>
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
-          <Grid3>
+          <Grid2>
             <Input label="Plano / Categoria" value={f.plano} onChange={set("plano")} placeholder="Ex: Titular, Dependente..." />
             <Input label="Valor Mensalidade (R$)" value={f.valor_mensalidade} onChange={set("valor_mensalidade")} placeholder="0,00" type="number" />
+          </Grid2>
+          <Grid2>
             <Input label="Data de Filiação" value={f.data_filiacao} onChange={set("data_filiacao")} type="date" />
-          </Grid3>
+            <div>
+              <label style={{display:"block",fontSize:12,fontWeight:600,color:"#333333",marginBottom:4}}>
+                Gerar mensalidades a partir de <span style={{color:"#c0392b"}}>*</span>
+              </label>
+              <input type="month" value={f.data_inicio_mensalidade} onChange={e=>set("data_inicio_mensalidade")(e.target.value)}
+                style={{border:"1.5px solid #ddd",borderRadius:5,padding:"10px 12px",fontSize:13,
+                  width:"100%",boxSizing:"border-box",fontFamily:"inherit",outline:"none"}} />
+              <span style={{fontSize:11,color:"#666666",marginTop:3,display:"block"}}>
+                Ex: 2015-01 para gerar desde Jan/2015 até hoje
+              </span>
+            </div>
+          </Grid2>
           <Select label="Status" value={f.status} onChange={set("status")}
             options={[{value:"ativo",label:"✅ Ativo"},{value:"inativo",label:"⏸ Inativo"},{value:"suspenso",label:"⚠️ Suspenso"}]} />
           <Textarea label="Observações" value={f.observacoes} onChange={set("observacoes")} placeholder="Informações adicionais..." rows={3} />
@@ -3131,32 +3211,6 @@ function Configuracoes() {
 
 // ─── APP ROOT ────────────────────────────────────────────────────────────────
 
-class ErrorBoundary extends React.Component {
-  constructor(props) { super(props); this.state = { hasError: false, error: null }; }
-  static getDerivedStateFromError(error) { return { hasError: true, error }; }
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div style={{minHeight:"100vh",background:"#1a3a5c",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"sans-serif"}}>
-          <div style={{background:"#fff",borderRadius:12,padding:"40px 48px",maxWidth:520,textAlign:"center"}}>
-            <div style={{fontSize:48,marginBottom:16}}>⚠️</div>
-            <h2 style={{color:"#1a3a5c",marginBottom:12}}>Erro no sistema</h2>
-            <p style={{color:"#666",fontSize:14,marginBottom:24,lineHeight:1.6}}>
-              {this.state.error?.message || "Erro desconhecido"}
-            </p>
-            <button onClick={()=>window.location.reload()}
-              style={{background:"#c8992a",color:"#fff",border:"none",padding:"10px 28px",
-                borderRadius:5,fontWeight:700,fontSize:14,cursor:"pointer"}}>
-              Recarregar
-            </button>
-          </div>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
-
 function App() {
   const [user,setUser]       = useState(null);
   const [page,setPage]       = useState("dashboard");
@@ -3164,7 +3218,7 @@ function App() {
 
   if(!user) return <Login onLogin={setUser} />;
 
-  const { podeEditar, podeTesouraria, podeUsuarios, podeProjetos, podeConfigs, podeEditarSite } = usePerfil(user);
+  const { podeEditar, podeTesouraria, podeUsuarios, podeProjetos, podeConfigs, podeEditarSite, podeAssociados } = usePerfil(user);
 
   function Bloqueado({ msg }) {
     return (
@@ -3203,9 +3257,9 @@ function App() {
   );
 }
 
-// Montar o app com ErrorBoundary
+// Montar o app
 const _root = ReactDOM.createRoot(document.getElementById('root'));
-_root.render(React.createElement(ErrorBoundary, null, React.createElement(App)));
+_root.render(React.createElement(App));
   </script>
 
   <script>
