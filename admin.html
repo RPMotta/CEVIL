@@ -116,6 +116,7 @@ const NAV_ITEMS = [
   { id:"relatorios",       label:"Relatórios",        icon:"▦", section:null,         perfis:["super_admin","visualizador"] },
   { id:"tesouraria",       label:"Tesouraria",        icon:"💰", section:null,         perfis:["super_admin","tesouraria"] },
   { id:"associados",       label:"Associados",        icon:"🤝", section:null,         perfis:["super_admin","visualizador"] },
+  { id:"transparencia-fin", label:"Transparência",     icon:"📢", section:null,         perfis:["super_admin","tesouraria","visualizador"] },
   { id:"minha-conta",      label:"Minha Conta",       icon:"🔑", section:"SISTEMA",    perfis:["super_admin","tesouraria","visualizador"] },
   { id:"projetos",         label:"Projetos",          icon:"📋", section:null,         perfis:["super_admin"] },
   { id:"usuarios",         label:"Usuários",          icon:"🔒", section:null,         perfis:["super_admin"] },
@@ -1635,6 +1636,298 @@ ALTER TABLE associados   DISABLE ROW LEVEL SECURITY;
 ALTER TABLE mensalidades DISABLE ROW LEVEL SECURITY;`;
 
 
+// ─── TRANSPARÊNCIA FINANCEIRA ─────────────────────────────────────────────────
+
+function TransparenciaFinanceira() {
+  const [lancamentos, setLancamentos] = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [periodo, setPeriodo]         = useState("mes");   // mes | trimestre | ano | total
+  const [anoSel, setAnoSel]           = useState(new Date().getFullYear());
+  const [mesSel, setMesSel]           = useState(new Date().getMonth() + 1);
+
+  const meses = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+  const mesesCurto = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+  const fmt = v => Number(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
+
+  async function load() {
+    setLoading(true);
+    try {
+      const r = await supa("/financeiro?select=*&order=data.asc");
+      setLancamentos(r || []);
+    } catch(_) {}
+    finally { setLoading(false); }
+  }
+
+  useEffect(() => { load(); }, []);
+
+  // ── Filtrar por período ────────────────────────────────────────────────────
+  function filtrar(rows) {
+    const ano = anoSel;
+    const mes = mesSel;
+    if (periodo === "mes")       return rows.filter(l => l.data?.startsWith(`${ano}-${String(mes).padStart(2,"0")}`));
+    if (periodo === "trimestre") {
+      const tri = Math.ceil(mes / 3);
+      const mInicio = (tri - 1) * 3 + 1;
+      const mFim    = tri * 3;
+      return rows.filter(l => {
+        if (!l.data) return false;
+        const [y, m] = l.data.split("-").map(Number);
+        return y === ano && m >= mInicio && m <= mFim;
+      });
+    }
+    if (periodo === "ano")  return rows.filter(l => l.data?.startsWith(`${ano}`));
+    return rows; // total
+  }
+
+  const dados = filtrar(lancamentos);
+  const entradas   = dados.filter(l => l.tipo === "entrada");
+  const saidas     = dados.filter(l => l.tipo === "saida");
+  const totEnt     = entradas.reduce((s, l) => s + Number(l.valor||0), 0);
+  const totSai     = saidas.reduce((s, l) => s + Number(l.valor||0), 0);
+  const saldo      = totEnt - totSai;
+
+  // ── Agrupar por categoria ──────────────────────────────────────────────────
+  function porCategoria(rows) {
+    const m = {};
+    rows.forEach(l => { m[l.categoria||"Outros"] = (m[l.categoria||"Outros"] || 0) + Number(l.valor||0); });
+    return Object.entries(m).sort((a,b) => b[1]-a[1]);
+  }
+  const catEnt = porCategoria(entradas);
+  const catSai = porCategoria(saidas);
+
+  // ── Evolução mensal (últimos 6 meses) ─────────────────────────────────────
+  const evolucao = (() => {
+    const hoje = new Date();
+    return Array.from({length:6}, (_,i) => {
+      const d = new Date(hoje.getFullYear(), hoje.getMonth() - 5 + i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+      const ent = lancamentos.filter(l => l.data?.startsWith(key) && l.tipo==="entrada").reduce((s,l)=>s+Number(l.valor||0),0);
+      const sai = lancamentos.filter(l => l.data?.startsWith(key) && l.tipo==="saida").reduce((s,l)=>s+Number(l.valor||0),0);
+      return { label: `${mesesCurto[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`, ent, sai, saldo: ent-sai };
+    });
+  })();
+  const maxEvolucao = Math.max(...evolucao.flatMap(e => [e.ent, e.sai]), 1);
+
+  // ── Label do período ───────────────────────────────────────────────────────
+  const labelPeriodo = () => {
+    if (periodo === "mes")       return `${meses[mesSel-1]} de ${anoSel}`;
+    if (periodo === "trimestre") return `${Math.ceil(mesSel/3)}º Trimestre de ${anoSel}`;
+    if (periodo === "ano")       return `Ano de ${anoSel}`;
+    return "Todos os períodos";
+  };
+
+  const anos = (() => {
+    const set = new Set(lancamentos.map(l => l.data?.split("-")[0]).filter(Boolean));
+    const arr = [...set].map(Number).sort((a,b)=>b-a);
+    if (!arr.includes(new Date().getFullYear())) arr.unshift(new Date().getFullYear());
+    return arr;
+  })();
+
+  const pctBar = (v, total) => total > 0 ? Math.min(Math.round((v/total)*100), 100) : 0;
+
+  return (
+    <div>
+      <PageHeader title="Portal de Transparência" subtitle="Visão financeira pública — somente leitura" />
+
+      {/* Aviso somente leitura */}
+      <div style={{background:"#f0f6ff",border:`1px solid ${C.azulMedio}40`,borderRadius:8,
+        padding:"10px 18px",fontSize:13,color:C.azulMedio,marginBottom:24,
+        display:"flex",alignItems:"center",gap:10}}>
+        <span style={{fontSize:18}}>📢</span>
+        <span>Este portal é <strong>somente leitura</strong>. As informações refletem os lançamentos registrados na Tesouraria.</span>
+      </div>
+
+      {/* Filtros de período */}
+      <Card style={{marginBottom:24}}>
+        <div style={{display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
+          <span style={{fontSize:13,fontWeight:700,color:C.azulEscuro}}>Período:</span>
+          {[["mes","Mensal"],["trimestre","Trimestral"],["ano","Anual"],["total","Total Geral"]].map(([v,l])=>(
+            <button key={v} onClick={()=>setPeriodo(v)}
+              style={{padding:"6px 16px",borderRadius:20,border:`2px solid ${periodo===v?C.dourado:C.cinzaClaro}`,
+                background:periodo===v?C.dourado:"transparent",color:periodo===v?C.branco:C.cinzaMedio,
+                fontWeight:periodo===v?700:400,fontSize:13,cursor:"pointer",fontFamily:"inherit"}}>
+              {l}
+            </button>
+          ))}
+          {periodo !== "total" && (
+            <>
+              {(periodo === "mes" || periodo === "trimestre") && (
+                <select value={mesSel} onChange={e=>setMesSel(Number(e.target.value))}
+                  style={{border:`1.5px solid #ddd`,borderRadius:5,padding:"6px 10px",fontSize:13,fontFamily:"inherit",cursor:"pointer"}}>
+                  {meses.map((m,i)=><option key={i} value={i+1}>{periodo==="trimestre"?`${Math.ceil((i+1)/3)}º Tri`:m}</option>).filter((_,i)=>periodo==="mes"||i%3===0)}
+                </select>
+              )}
+              <select value={anoSel} onChange={e=>setAnoSel(Number(e.target.value))}
+                style={{border:`1.5px solid #ddd`,borderRadius:5,padding:"6px 10px",fontSize:13,fontFamily:"inherit",cursor:"pointer"}}>
+                {anos.map(a=><option key={a} value={a}>{a}</option>)}
+              </select>
+            </>
+          )}
+          <span style={{marginLeft:"auto",fontSize:13,fontWeight:600,color:C.azulEscuro}}>{labelPeriodo()}</span>
+        </div>
+      </Card>
+
+      {loading ? <div style={{textAlign:"center",padding:80,color:C.cinzaMedio}}>Carregando dados...</div> : (<>
+
+      {/* Cards principais */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:20,marginBottom:24}}>
+        <div style={{background:C.branco,borderRadius:12,padding:"28px 24px",boxShadow:"0 2px 12px rgba(0,0,0,.07)",borderTop:`4px solid ${C.verde}`,textAlign:"center"}}>
+          <div style={{fontSize:11,color:C.cinzaMedio,textTransform:"uppercase",letterSpacing:".1em",marginBottom:8}}>Total de Entradas</div>
+          <div style={{fontSize:32,fontWeight:700,color:C.verde,fontFamily:"'Merriweather',serif"}}>{fmt(totEnt)}</div>
+          <div style={{fontSize:12,color:C.cinzaMedio,marginTop:6}}>{entradas.length} lançamento(s)</div>
+        </div>
+        <div style={{background:C.branco,borderRadius:12,padding:"28px 24px",boxShadow:"0 2px 12px rgba(0,0,0,.07)",borderTop:`4px solid ${C.vermelho}`,textAlign:"center"}}>
+          <div style={{fontSize:11,color:C.cinzaMedio,textTransform:"uppercase",letterSpacing:".1em",marginBottom:8}}>Total de Saídas</div>
+          <div style={{fontSize:32,fontWeight:700,color:C.vermelho,fontFamily:"'Merriweather',serif"}}>{fmt(totSai)}</div>
+          <div style={{fontSize:12,color:C.cinzaMedio,marginTop:6}}>{saidas.length} lançamento(s)</div>
+        </div>
+        <div style={{background:C.branco,borderRadius:12,padding:"28px 24px",boxShadow:"0 2px 12px rgba(0,0,0,.07)",borderTop:`4px solid ${saldo>=0?C.azulMedio:C.vermelho}`,textAlign:"center"}}>
+          <div style={{fontSize:11,color:C.cinzaMedio,textTransform:"uppercase",letterSpacing:".1em",marginBottom:8}}>Saldo do Período</div>
+          <div style={{fontSize:32,fontWeight:700,color:saldo>=0?C.azulMedio:C.vermelho,fontFamily:"'Merriweather',serif"}}>{fmt(saldo)}</div>
+          <div style={{fontSize:12,color:saldo>=0?C.verde:C.vermelho,marginTop:6,fontWeight:600}}>{saldo>=0?"✓ Superávit":"✗ Déficit"}</div>
+        </div>
+      </div>
+
+      {/* Gráfico de barras — evolução mensal */}
+      <Card style={{marginBottom:24}}>
+        <SecaoTitulo icon="📈">Evolução dos Últimos 6 Meses</SecaoTitulo>
+        <div style={{display:"flex",gap:12,alignItems:"flex-end",height:160,padding:"0 8px"}}>
+          {evolucao.map((e,i)=>(
+            <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+              <div style={{width:"100%",display:"flex",gap:3,alignItems:"flex-end",height:120}}>
+                <div style={{flex:1,background:C.verde+"cc",borderRadius:"3px 3px 0 0",height:`${pctBar(e.ent,maxEvolucao)}%`,minHeight:e.ent>0?4:0,transition:"height .5s"}} title={`Entradas: ${fmt(e.ent)}`} />
+                <div style={{flex:1,background:C.vermelho+"cc",borderRadius:"3px 3px 0 0",height:`${pctBar(e.sai,maxEvolucao)}%`,minHeight:e.sai>0?4:0,transition:"height .5s"}} title={`Saídas: ${fmt(e.sai)}`} />
+              </div>
+              <div style={{fontSize:10,color:C.cinzaMedio,textAlign:"center"}}>{e.label}</div>
+              <div style={{fontSize:9,color:e.saldo>=0?C.verde:C.vermelho,fontWeight:700}}>{e.saldo>=0?"+":""}{fmt(e.saldo)}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{display:"flex",gap:20,justifyContent:"center",marginTop:12}}>
+          <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:C.cinzaMedio}}>
+            <div style={{width:12,height:12,background:C.verde+"cc",borderRadius:2}} /> Entradas
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:6,fontSize:12,color:C.cinzaMedio}}>
+            <div style={{width:12,height:12,background:C.vermelho+"cc",borderRadius:2}} /> Saídas
+          </div>
+        </div>
+      </Card>
+
+      {/* Categorias */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:20,marginBottom:24}}>
+        <Card>
+          <SecaoTitulo icon="📥">Entradas por Categoria</SecaoTitulo>
+          {catEnt.length===0 ? <p style={{color:C.cinzaMedio,fontSize:13}}>Nenhuma entrada no período.</p>
+          : catEnt.map(([cat,val])=>(
+            <div key={cat} style={{marginBottom:14}}>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:5}}>
+                <span style={{fontWeight:600,color:C.azulEscuro}}>{cat}</span>
+                <span style={{color:C.verde,fontWeight:700}}>{fmt(val)}</span>
+              </div>
+              <div style={{height:8,background:C.cinzaClaro,borderRadius:4,overflow:"hidden"}}>
+                <div style={{width:`${pctBar(val,totEnt)}%`,height:"100%",background:`linear-gradient(to right,${C.verde},#52c97a)`,borderRadius:4,transition:"width .5s"}} />
+              </div>
+              <div style={{fontSize:10,color:C.cinzaMedio,marginTop:2,textAlign:"right"}}>{pctBar(val,totEnt)}% do total</div>
+            </div>
+          ))}
+          {catEnt.length>0 && (
+            <div style={{borderTop:`1px solid ${C.cinzaClaro}`,paddingTop:10,marginTop:4,display:"flex",justifyContent:"space-between",fontSize:13}}>
+              <strong>Total</strong><strong style={{color:C.verde}}>{fmt(totEnt)}</strong>
+            </div>
+          )}
+        </Card>
+
+        <Card>
+          <SecaoTitulo icon="📤">Saídas por Categoria</SecaoTitulo>
+          {catSai.length===0 ? <p style={{color:C.cinzaMedio,fontSize:13}}>Nenhuma saída no período.</p>
+          : catSai.map(([cat,val])=>(
+            <div key={cat} style={{marginBottom:14}}>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:5}}>
+                <span style={{fontWeight:600,color:C.azulEscuro}}>{cat}</span>
+                <span style={{color:C.vermelho,fontWeight:700}}>{fmt(val)}</span>
+              </div>
+              <div style={{height:8,background:C.cinzaClaro,borderRadius:4,overflow:"hidden"}}>
+                <div style={{width:`${pctBar(val,totSai)}%`,height:"100%",background:`linear-gradient(to right,${C.vermelho},#e06060)`,borderRadius:4,transition:"width .5s"}} />
+              </div>
+              <div style={{fontSize:10,color:C.cinzaMedio,marginTop:2,textAlign:"right"}}>{pctBar(val,totSai)}% do total</div>
+            </div>
+          ))}
+          {catSai.length>0 && (
+            <div style={{borderTop:`1px solid ${C.cinzaClaro}`,paddingTop:10,marginTop:4,display:"flex",justifyContent:"space-between",fontSize:13}}>
+              <strong>Total</strong><strong style={{color:C.vermelho}}>{fmt(totSai)}</strong>
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* Tabela de lançamentos — somente leitura */}
+      <Card>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+          <SecaoTitulo icon="📋">Lançamentos do Período</SecaoTitulo>
+          <div style={{fontSize:12,color:C.cinzaMedio}}>{dados.length} registro(s)</div>
+        </div>
+        {dados.length===0
+          ? <div style={{textAlign:"center",padding:"40px 0",color:C.cinzaMedio}}>
+              <div style={{fontSize:40,marginBottom:8}}>📭</div>
+              <div>Nenhum lançamento no período selecionado.</div>
+            </div>
+          : <table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}>
+              <thead>
+                <tr style={{background:C.azulEscuro}}>
+                  {["Data","Tipo","Categoria","Descrição","Projeto","Valor"].map(h=>(
+                    <th key={h} style={{padding:"10px 12px",textAlign:"left",color:C.branco,fontWeight:700,fontSize:11,letterSpacing:".05em"}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {[...dados].sort((a,b)=>new Date(b.data)-new Date(a.data)).map((l,i)=>(
+                  <tr key={l.id} style={{background:i%2===0?C.branco:C.cinzaClaro}}>
+                    <td style={{padding:"9px 12px",whiteSpace:"nowrap",color:C.cinzaMedio}}>
+                      {l.data?new Date(l.data+"T12:00:00").toLocaleDateString("pt-BR"):"—"}
+                    </td>
+                    <td style={{padding:"9px 12px"}}>
+                      <span style={{
+                        background:l.tipo==="entrada"?"#e6f7ec":"#fef0f0",
+                        color:l.tipo==="entrada"?C.verde:C.vermelho,
+                        padding:"2px 8px",borderRadius:12,fontSize:11,fontWeight:700
+                      }}>
+                        {l.tipo==="entrada"?"↑ Entrada":"↓ Saída"}
+                      </span>
+                    </td>
+                    <td style={{padding:"9px 12px",color:C.cinzaMedio}}>{l.categoria||"—"}</td>
+                    <td style={{padding:"9px 12px",fontWeight:600}}>{l.descricao}</td>
+                    <td style={{padding:"9px 12px",color:C.cinzaMedio}}>{l.projeto||"—"}</td>
+                    <td style={{padding:"9px 12px",fontWeight:700,color:l.tipo==="entrada"?C.verde:C.vermelho}}>
+                      {l.tipo==="entrada"?"+":"-"}{fmt(l.valor)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr style={{background:C.azulEscuro}}>
+                  <td colSpan={4} style={{padding:"10px 12px",color:C.branco,fontWeight:700,fontSize:12}}>TOTAL DO PERÍODO</td>
+                  <td style={{padding:"10px 12px",color:"#90cfa8",fontWeight:700}}>Entradas: {fmt(totEnt)}</td>
+                  <td style={{padding:"10px 12px",color:saldo>=0?"#90cfa8":"#f5a5a5",fontWeight:700,fontSize:14}}>
+                    Saldo: {fmt(saldo)}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+        }
+      </Card>
+
+      {/* Rodapé informativo */}
+      <div style={{textAlign:"center",padding:"24px 0",fontSize:12,color:C.cinzaMedio}}>
+        <div>📢 Portal de Transparência — Associação CEVIL</div>
+        <div style={{marginTop:4}}>Os dados apresentados refletem os registros financeiros da associação. Atualizado em tempo real.</div>
+      </div>
+
+      </>)}
+    </div>
+  );
+}
+
+
 // ─── ASSOCIADOS ──────────────────────────────────────────────────────────────
 
 function Associados({ user }) {
@@ -2852,6 +3145,7 @@ function App() {
       case "usuarios":         return podeUsuarios   ? <Usuarios />                                        : <Bloqueado msg="Somente o Super Admin pode gerenciar usuários." />;
       case "configuracoes":    return podeConfigs    ? <Configuracoes />                                   : <Bloqueado msg="Somente o Super Admin pode acessar as configurações." />;
       case "associados":       return podeAssociados  ? <Associados user={user} />                         : <Bloqueado msg="Acesso negado." />;
+      case "transparencia-fin": return <TransparenciaFinanceira />;
       case "editor-site":     return podeEditarSite ? <EditorSite />                                      : <Bloqueado msg="Somente o Super Admin pode editar o site." />;
       default:                 return <Dashboard setPage={setPage} />;
     }
