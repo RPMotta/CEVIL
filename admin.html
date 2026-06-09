@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- CEVIL Admin v20260609-FINAL -->
+<!-- CEVIL Admin v20260609-NODASH -->
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
@@ -65,6 +65,30 @@ function hashSimple(str) {
   for (let i = 0; i < str.length; i++) h = (Math.imul(31, h) + str.charCodeAt(i)) | 0;
   return Math.abs(h).toString(16).padStart(8, "0");
 }
+
+// ─── Máscaras de entrada ─────────────────────────────────────────────────────
+function mascaraCPF(v) {
+  v = v.replace(/\D/g,"").slice(0,11);
+  if(v.length<=3) return v;
+  if(v.length<=6) return v.slice(0,3)+"."+v.slice(3);
+  if(v.length<=9) return v.slice(0,3)+"."+v.slice(3,6)+"."+v.slice(6);
+  return v.slice(0,3)+"."+v.slice(3,6)+"."+v.slice(6,9)+"-"+v.slice(9,11);
+}
+function mascaraTelefone(v) {
+  v = v.replace(/\D/g,"").slice(0,11);
+  if(v.length===0) return "";
+  if(v.length<=2) return "("+v;
+  if(v.length<=3) return "("+v.slice(0,2)+") "+v.slice(2);
+  if(v.length<=7) return "("+v.slice(0,2)+") "+v.slice(2,3)+" "+v.slice(3);
+  if(v.length<=11) return "("+v.slice(0,2)+") "+v.slice(2,3)+" "+v.slice(3,7)+" - "+v.slice(7);
+  return v;
+}
+function mascaraCEP(v) {
+  v = v.replace(/\D/g,"").slice(0,8);
+  if(v.length<=5) return v;
+  return v.slice(0,5)+"-"+v.slice(5);
+}
+function apenasNumeros(v){ return v.replace(/\D/g,""); }
 
 // ─── Paleta idêntica ao site público ───────────────────────────────────────
 const C = {
@@ -178,6 +202,44 @@ function Textarea({ label, value, onChange, placeholder, rows=4 }) {
         style={{border:"1.5px solid #ddd",borderRadius:5,padding:"10px 12px",fontSize:13,
           background:C.branco,color:C.cinzaEscuro,outline:"none",resize:"vertical",
           fontFamily:"inherit",width:"100%",boxSizing:"border-box"}} />
+    </div>
+  );
+}
+
+function InputMask({ label, value, onChange, placeholder, mask, required, onBlur }) {
+  // mask: "cpf" | "telefone" | "cep"
+  function aplicar(v) {
+    if(mask==="cpf")      return mascaraCPF(v);
+    if(mask==="telefone") return mascaraTelefone(v);
+    if(mask==="cep")      return mascaraCEP(v);
+    return v;
+  }
+  function handleChange(e) {
+    const raw = e.target.value;
+    const mascarado = aplicar(raw);
+    onChange(mascarado);
+    // Reposicionar cursor mantendo posição relativa
+    const el = e.target;
+    const pos = el.selectionStart;
+    requestAnimationFrame(()=>{
+      if(el === document.activeElement) {
+        try { el.setSelectionRange(pos, pos); } catch(_){}
+      }
+    });
+  }
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:4}}>
+      {label && <label style={{fontSize:12,fontWeight:600,color:C.cinzaEscuro}}>{label}{required&&<span style={{color:C.vermelho}}> *</span>}</label>}
+      <input
+        type="text"
+        value={value??""}
+        onChange={handleChange}
+        onBlur={onBlur}
+        placeholder={placeholder}
+        style={{border:"1.5px solid #ddd",borderRadius:5,padding:"10px 12px",fontSize:13,
+          background:C.branco,color:C.cinzaEscuro,outline:"none",
+          width:"100%",boxSizing:"border-box",fontFamily:"inherit"}}
+      />
     </div>
   );
 }
@@ -557,7 +619,7 @@ function NovoCadastro({ onSaved }) {
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
           <Input label="Nome Completo" value={f.nome_completo} onChange={set("nome_completo")} placeholder="Ex: Maria Aparecida da Silva" required />
           <Grid2>
-            <Input label="CPF" value={f.cpf} onChange={set("cpf")} placeholder="000.000.000-00" required />
+            <InputMask label="CPF" mask="cpf" value={f.cpf} onChange={v=>setF(p=>({...p,cpf:v}))} placeholder="000.000.000-00" required />
             <Input label="Data de Nascimento" value={f.data_nascimento} onChange={set("data_nascimento")} type="date" />
           </Grid2>
         </div>
@@ -588,12 +650,12 @@ function NovoCadastro({ onSaved }) {
         <SecaoTitulo icon="📞">Contato</SecaoTitulo>
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
           <Grid2>
-            <Input label="Telefone / WhatsApp" value={f.telefone} onChange={set("telefone")} placeholder="(48) 99999-9999" />
+            <InputMask label="Telefone / WhatsApp" mask="telefone" value={f.telefone} onChange={v=>setF(p=>({...p,telefone:v}))} placeholder="(48) 9 8888 - 8888" />
             <Input label="E-mail" value={f.email} onChange={set("email")} placeholder="email@exemplo.com" type="email" />
           </Grid2>
           <Grid2>
             <Input label="Nome — Emergência" value={f.emerg_nome} onChange={set("emerg_nome")} placeholder="Ex: João Silva" />
-            <Input label="Tel — Emergência" value={f.emerg_telefone} onChange={set("emerg_telefone")} placeholder="(48) 98888-8888" />
+            <InputMask label="Tel — Emergência" mask="telefone" value={f.emerg_telefone} onChange={v=>setF(p=>({...p,emerg_telefone:v}))} placeholder="(48) 9 8888 - 8888" />
           </Grid2>
         </div>
       </Card>
@@ -2231,10 +2293,21 @@ function FichaAssociado({ associado, onClose, showToast, reload, user }) {
 }
 
 function CadastrarAssociado({ setAba, showToast }) {
-  const empty = {nome:"",cpf:"",data_nascimento:"",telefone:"",email:"",endereco:"",bairro:"",cidade:"SC",estado:"SC",cep:"",plano:"",valor_mensalidade:"",data_filiacao:new Date().toISOString().split("T")[0],data_inicio_mensalidade:new Date().toISOString().split("T")[0].slice(0,7),status:"ativo",observacoes:""};
+  const empty = {nome:"",cpf:"",data_nascimento:"",telefone:"",email:"",endereco:"",numero:"",bairro:"",cidade:"",estado:"SC",cep:"",plano:"",valor_mensalidade:"",data_filiacao:new Date().toISOString().split("T")[0],data_inicio_mensalidade:new Date().toISOString().split("T")[0].slice(0,7),status:"ativo",observacoes:""};
   const [f, setF] = useState(empty);
   const [loading, setLoading] = useState(false);
   const set = k => v => setF(p=>({...p,[k]:v}));
+
+  async function buscarCepAssoc(cep) {
+    const c = cep.replace(/\D/g,"");
+    if(c.length!==8) return;
+    try {
+      const r = await fetch(`https://viacep.com.br/ws/${c}/json/`);
+      const d = await r.json();
+      if(d.erro) return;
+      setF(p=>({...p, endereco:(d.logradouro||""), bairro:(d.bairro||""), cidade:(d.localidade||""), estado:(d.uf||"")}));
+    } catch(_){}
+  }
 
   function gerarMatricula() {
     const ano = new Date().getFullYear().toString().slice(2);
@@ -2284,11 +2357,11 @@ function CadastrarAssociado({ setAba, showToast }) {
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
           <Input label="Nome Completo *" value={f.nome} onChange={set("nome")} placeholder="Nome completo do associado" required />
           <Grid2>
-            <Input label="CPF" value={f.cpf} onChange={set("cpf")} placeholder="000.000.000-00" />
+            <InputMask label="CPF" mask="cpf" value={f.cpf} onChange={v=>setF(p=>({...p,cpf:v}))} placeholder="000.000.000-00" />
             <Input label="Data de Nascimento" value={f.data_nascimento} onChange={set("data_nascimento")} type="date" />
           </Grid2>
           <Grid2>
-            <Input label="Telefone / WhatsApp" value={f.telefone} onChange={set("telefone")} placeholder="(48) 99999-9999" />
+            <InputMask label="Telefone / WhatsApp" mask="telefone" value={f.telefone} onChange={v=>setF(p=>({...p,telefone:v}))} placeholder="(48) 9 8888 - 8888" />
             <Input label="E-mail" value={f.email} onChange={set("email")} placeholder="email@exemplo.com" />
           </Grid2>
         </div>
@@ -2297,11 +2370,19 @@ function CadastrarAssociado({ setAba, showToast }) {
       <Card style={{marginBottom:20}}>
         <SecaoTitulo icon="📍">Endereço</SecaoTitulo>
         <div style={{display:"flex",flexDirection:"column",gap:14}}>
-          <Input label="Endereço (Rua + Número)" value={f.endereco} onChange={set("endereco")} placeholder="Rua das Flores, 123" />
+          <div style={{display:"grid",gridTemplateColumns:"1fr auto 140px",gap:10,alignItems:"end"}}>
+            <InputMask label="CEP" mask="cep" value={f.cep}
+              onChange={v=>{ setF(p=>({...p,cep:v})); if(v.replace(/\D/g,"").length===8) buscarCepAssoc(v); }}
+              placeholder="00000-000" />
+            <Btn onClick={()=>buscarCepAssoc(f.cep)} style={{height:40}}>🔍 Buscar CEP</Btn>
+            <Input label="Número" value={f.numero||""} onChange={v=>setF(p=>({...p,numero:v}))} placeholder="123" />
+          </div>
+          <Input label="Endereço (Rua / Logradouro)" value={f.endereco} onChange={set("endereco")} placeholder="Preenchido pelo CEP" />
           <Grid3>
-            <Input label="Bairro" value={f.bairro} onChange={set("bairro")} placeholder="Bairro" />
-            <Input label="Cidade" value={f.cidade} onChange={set("cidade")} placeholder="Cidade" />
-            <Input label="CEP" value={f.cep} onChange={set("cep")} placeholder="00000-000" />
+            <Input label="Bairro" value={f.bairro} onChange={set("bairro")} placeholder="Preenchido pelo CEP" />
+            <Input label="Cidade" value={f.cidade} onChange={set("cidade")} placeholder="Preenchido pelo CEP" />
+            <Select label="Estado" value={f.estado} onChange={set("estado")}
+              options={[{value:"",label:"UF"},...["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"].map(e=>({value:e,label:e}))]} />
           </Grid3>
         </div>
       </Card>
