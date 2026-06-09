@@ -2161,11 +2161,15 @@ function TransparenciaFinanceira() {
               </tbody>
               <tfoot>
                 <tr style={{background:C.azulEscuro}}>
-                  <td colSpan={3} style={{padding:"10px 12px",color:C.branco,fontWeight:700,fontSize:12}}>TOTAL DO PERÍODO</td>
-                  <td style={{padding:"10px 12px",color:"#90cfa8",fontWeight:700}}>Entradas: {fmt(totEnt)}</td>
-                  <td style={{padding:"10px 12px",color:"#f5a5a5",fontWeight:700}}>Saídas: {fmt(totSai)}</td>
-                  <td style={{padding:"10px 12px",color:saldo>=0?"#90cfa8":"#f5a5a5",fontWeight:700,fontSize:14}}>
-                    Saldo: {fmt(saldo)}
+                  <td colSpan={2} style={{padding:"10px 12px",color:C.branco,fontWeight:700,fontSize:12}}>TOTAL DO PERÍODO</td>
+                  <td colSpan={2} style={{padding:"10px 12px",color:"#90cfa8",fontWeight:700,textAlign:"right"}}>
+                    ↑ Entradas: {fmt(totEnt)}
+                  </td>
+                  <td style={{padding:"10px 12px",color:"#f5a5a5",fontWeight:700,textAlign:"right"}}>
+                    ↓ Saídas: {fmt(totSai)}
+                  </td>
+                  <td style={{padding:"10px 12px",color:saldo>=0?"#90cfa8":"#f5a5a5",fontWeight:700,fontSize:14,textAlign:"right"}}>
+                    = Saldo: {fmt(saldo)}
                   </td>
                 </tr>
               </tfoot>
