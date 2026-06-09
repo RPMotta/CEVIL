@@ -64,7 +64,8 @@
             </ul>
           </li>
           <li><a href="contato.html">Contato</a></li>
-          <li><a href="causas.html" class="btn-doe">Doe Agora</a></li><li><a href="admin.html" style="background:#c8992a;color:#fff;padding:9px 18px;border-radius:5px;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;margin-left:6px;">🔐 Admin</a></li>
+          <li><a href="causas.html" class="btn-doe">Doe Agora</a></li>
+          <li><a href="admin.html" style="background:#c8992a;color:#fff;padding:9px 18px;border-radius:5px;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;margin-left:6px;">🔐 Admin</a></li>
         </ul>
       </nav>
     </div>
@@ -105,7 +106,7 @@
       <div class="divisor divisor-centro"></div>
       <h2 style="text-align:center;color:var(--azul-escuro);margin-bottom:40px;">Conheça onde seu apoio chega</h2>
 
-      <div class="causas-grid">
+      <div class="causas-grid" id="causas-dinamicas">
         <div class="causa-card">
           <div class="causa-img" style="background:linear-gradient(135deg,#1a3a5c,#1e5fa8);"></div>
           <div class="causa-corpo">
@@ -178,5 +179,27 @@
   </footer>
 
   <script src="main.js"></script>
+
+<script>
+(function(){
+  var SUPA_URL="https://hnpahosgldgecwgobizb.supabase.co",SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhucGFob3NnbGRnZWN3Z29iaXpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5OTg3MzksImV4cCI6MjA5NjU3NDczOX0.Ux4xGVVshJpOZ0vn10YZ6seeia_m4TjwTboiKTXVkdM";
+  var H={apikey:SUPA_KEY,Authorization:"Bearer "+SUPA_KEY};
+  function get(path){return fetch(SUPA_URL+"/rest/v1"+path,{headers:H}).then(r=>r.json()).catch(()=>[]);}
+  function ready(fn){document.readyState==="loading"?document.addEventListener("DOMContentLoaded",fn):fn();}
+  
+ready(async function(){
+  var grid=document.getElementById("causas-dinamicas");
+  if(!grid)return;
+  var rows=await get("/site_causas?ativo=eq.true&select=*&order=id.asc");
+  if(!Array.isArray(rows)||!rows.length)return;
+  grid.innerHTML=rows.map(function(c){
+    var pct=c.meta_valor>0?Math.min(Math.round((c.arrecadado/c.meta_valor)*100),100):0;
+    var bg=c.imagem_url?"background-image:url('"+c.imagem_url+"');background-size:cover;background-position:center;":"background:linear-gradient(135deg,#1a3a5c,#1e5fa8);";
+    return "<div class=\"causa-card\"><div class=\"causa-img\" style=\""+bg+"\"></div><div class=\"causa-corpo\"><h3>"+c.titulo+"</h3><p>"+c.descricao+"</p><div class=\"causa-meta\"><span>Meta: R$ "+Number(c.meta_valor||0).toLocaleString("pt-BR")+"</span><span>"+pct+"% arrecadado</span></div><div class=\"causa-barra-track\"><div class=\"causa-barra-fill\" style=\"width:"+pct+"%;\"></div></div><a href=\"contato.html\" class=\"btn btn-primary\" style=\"width:100%;text-align:center;display:block;\">Apoiar esta causa</a></div></div>";
+  }).join("");
+});
+
+})();
+</script>
 </body>
 </html>
