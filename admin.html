@@ -63,6 +63,7 @@
       /* Mostrar overlay e hamburger */
       .sidebar-overlay.ativo { display: block !important; }
       .menu-ham { display: flex !important; }
+      .menu-fechar { display: flex !important; }
 
       /* Main ocupa toda a largura */
       .admin-main-wrap {
@@ -437,15 +438,26 @@ function Layout({ user, page, setPage, onLogout, children }) {
         boxShadow:"4px 0 20px rgba(0,0,0,.18)"}}>
 
         {/* Logo */}
-        <div style={{padding:"18px 16px 14px",borderBottom:"1px solid rgba(255,255,255,.1)"}}>
-          <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <div style={{width:38,height:38,borderRadius:"50%",background:"rgba(255,255,255,.1)",
-              border:"1px solid rgba(255,255,255,.2)",display:"flex",alignItems:"center",
-              justifyContent:"center",fontSize:18}}>🌿</div>
-            <div>
-              <div style={{fontFamily:"'Merriweather',serif",fontWeight:700,fontSize:14,color:C.branco}}>CEVIL</div>
-              <div style={{fontSize:9,color:C.douradoClaro,textTransform:"uppercase",letterSpacing:"1px"}}>Administração</div>
+        <div style={{padding:"14px 16px",borderBottom:"1px solid rgba(255,255,255,.1)"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <div style={{width:36,height:36,borderRadius:"50%",background:"rgba(255,255,255,.1)",
+                border:"1px solid rgba(255,255,255,.2)",display:"flex",alignItems:"center",
+                justifyContent:"center",fontSize:16}}>🌿</div>
+              <div>
+                <div style={{fontFamily:"'Merriweather',serif",fontWeight:700,fontSize:13,color:C.branco}}>CEVIL</div>
+                <div style={{fontSize:8,color:C.douradoClaro,textTransform:"uppercase",letterSpacing:"1px"}}>Administração</div>
+              </div>
             </div>
+            {/* Botão fechar — só aparece no mobile */}
+            <button className="menu-fechar" onClick={()=>{
+              const sb=document.querySelector('.admin-sidebar');
+              const ov=document.querySelector('.sidebar-overlay');
+              if(sb) sb.classList.remove('aberto');
+              if(ov) ov.classList.remove('ativo');
+            }} style={{background:"rgba(255,255,255,.1)",border:"none",color:"rgba(255,255,255,.8)",
+              width:28,height:28,borderRadius:6,fontSize:16,cursor:"pointer",
+              display:"none",alignItems:"center",justifyContent:"center"}}>✕</button>
           </div>
         </div>
 
@@ -501,10 +513,17 @@ function Layout({ user, page, setPage, onLogout, children }) {
 
         {/* Topbar — idêntica ao site público */}
         <header style={{background:C.azulEscuro,display:"flex",alignItems:"center",
-          justifyContent:"space-between",padding:"0 24px",height:50,flexShrink:0}}>
-          <div style={{display:"flex",alignItems:"center",gap:16,fontSize:12,color:"rgba(255,255,255,.65)"}}>
-            <span>🕐 Segunda a Sexta – 08h às 17h</span>
-            <span>📍 Rua Graciosa 227 – Palhoça, SC</span>
+          justifyContent:"space-between",padding:"0 16px",height:50,flexShrink:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:12,fontSize:12,color:"rgba(255,255,255,.65)"}}>
+            {/* Botão hamburger — só aparece no mobile via CSS */}
+            <button className="menu-ham" onClick={()=>{
+              const sb=document.querySelector('.admin-sidebar');
+              const ov=document.querySelector('.sidebar-overlay');
+              if(sb) sb.classList.toggle('aberto');
+              if(ov) ov.classList.toggle('ativo');
+            }}>☰</button>
+            <span className="admin-topbar-info">🕐 Segunda a Sexta – 08h às 17h</span>
+            <span className="admin-topbar-info">📍 Rua Graciosa 227 – Palhoça, SC</span>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
             <span style={{background:corPerfil,color:C.branco,fontSize:11,fontWeight:700,
@@ -2704,12 +2723,6 @@ function GerenciarMensalidades({ showToast, user }) {
               </div>
               <Input label="Valor (R$)" value={novaForm.valor} onChange={v=>setNovaForm(p=>({...p,valor:v}))} placeholder="0,00" type="number" />
               <div style={{display:"flex",alignItems:"center",gap:8}}>
-          <button className="menu-ham" onClick={()=>{
-            const sb=document.querySelector('.admin-sidebar');
-            const ov=document.querySelector('.sidebar-overlay');
-            if(sb){sb.classList.toggle('aberto');}
-            if(ov){ov.style.display=sb&&sb.classList.contains('aberto')?'block':'none';}
-          }}>☰</button>
                 <input type="checkbox" id="jaPago" checked={novaForm.pago} onChange={e=>setNovaForm(p=>({...p,pago:e.target.checked}))} style={{width:15,height:15}} />
                 <label htmlFor="jaPago" style={{fontSize:13,cursor:"pointer"}}>Marcar como já pago</label>
               </div>
