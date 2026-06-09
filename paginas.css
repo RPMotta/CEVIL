@@ -139,15 +139,41 @@
 .doc-card span { font-size: 12px; color: var(--cinza-medio); }
 .doc-card:hover span { color: rgba(255,255,255,.65); }
 
-/* ===== RESPONSIVO ===== */
+/* ===== RESPONSIVO COMPLETO ===== */
 @media (max-width: 1024px) {
   .pagina-grid { grid-template-columns: 1fr; }
   .pagina-sidebar { position: static; }
-  .contato-grid, .causas-grid, .voluntario-intro { grid-template-columns: 1fr; }
-  .beneficios-grid, .docs-grid { grid-template-columns: repeat(2,1fr); }
+  .contato-grid { grid-template-columns: 1fr; gap: 30px; }
+  .causas-grid { grid-template-columns: 1fr 1fr; }
+  .voluntario-intro { grid-template-columns: 1fr; }
+  .beneficios-grid { grid-template-columns: repeat(2,1fr); }
+  .docs-grid { grid-template-columns: repeat(2,1fr); }
   .noticias-lista { grid-template-columns: 1fr; }
+  .banner-conteudo h1 { font-size: 28px; }
 }
-@media (max-width: 600px) {
-  .banner-conteudo h1 { font-size: 26px; }
-  .beneficios-grid, .docs-grid { grid-template-columns: 1fr; }
+
+@media (max-width: 768px) {
+  .pagina-conteudo { padding: 40px 0; }
+  .banner-interno { height: 160px; }
+  .banner-conteudo h1 { font-size: 24px; }
+  .causas-grid { grid-template-columns: 1fr; }
+  .beneficios-grid { grid-template-columns: 1fr 1fr; }
+  .docs-grid { grid-template-columns: 1fr 1fr; }
+  .voluntario-img { height: 240px; }
+}
+
+@media (max-width: 480px) {
+  .banner-interno { height: 130px; }
+  .banner-conteudo h1 { font-size: 20px; }
+  .pagina-conteudo { padding: 30px 0; }
+  .causas-grid, .beneficios-grid, .docs-grid { grid-template-columns: 1fr; }
+  .voluntario-img { height: 200px; }
+  .contato-item { flex-direction: column; gap: 8px; }
+  .contato-icone { width: 38px; height: 38px; font-size: 16px; }
+  .pagina-corpo h2 { font-size: 21px; }
+  .timeline { padding-left: 18px; }
+  .forma-col { gap: 0; }
+  /* Tabelas responsivas */
+  .tabela-responsiva { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .tabela-responsiva table { min-width: 500px; }
 }

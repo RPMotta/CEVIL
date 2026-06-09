@@ -21,6 +21,49 @@
     #loading .spinner { width: 36px; height: 36px; margin-top: 10px; border: 3px solid rgba(255,255,255,.15); border-top-color: #c8992a; border-radius: 50%; animation: spin .75s linear infinite; }
     #loading .msg { font-size: 12px; color: rgba(255,255,255,.45); margin-top: 4px; }
     @keyframes spin { to { transform: rotate(360deg); } }
+
+    table { width: 100%; }
+    @media (max-width: 768px) {
+      /* Tabelas com scroll horizontal */
+      .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; display: block; }
+    }
+    /* ── Admin Responsivo ──────────────────────────────────────── */
+    @media (max-width: 1024px) {
+      .admin-layout { grid-template-columns: 200px 1fr !important; }
+    }
+    @media (max-width: 768px) {
+      .menu-ham { display: flex !important; }
+      .sidebar-overlay.ativo { display: block !important; }
+      /* Sidebar vira drawer */
+      .admin-layout { grid-template-columns: 1fr !important; grid-template-rows: auto 1fr; }
+      .admin-sidebar {
+        position: fixed !important; left: -260px; top: 0; bottom: 0; z-index: 1000;
+        transition: left .3s ease; width: 260px !important;
+        box-shadow: 4px 0 20px rgba(0,0,0,.3);
+      }
+      .admin-sidebar.aberto { left: 0 !important; }
+      .admin-main { padding: 16px !important; grid-column: 1 !important; }
+      .admin-topbar { padding: 0 16px !important; }
+      /* Botão hamburger */
+      .menu-ham {
+        display: none; align-items: center; justify-content: center;
+        width: 38px; height: 38px; background: rgba(255,255,255,.1);
+        border: none; border-radius: 5px; color: #fff; font-size: 20px;
+        cursor: pointer; margin-right: 10px;
+      }
+      /* Cards em coluna */
+      .cards-grid-4 { grid-template-columns: 1fr 1fr !important; gap: 12px !important; }
+      /* Tabelas com scroll */
+      .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+      .table-wrap table { min-width: 600px; }
+      /* Grids de formulário */
+      .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr !important; }
+    }
+    @media (max-width: 480px) {
+      .cards-grid-4 { grid-template-columns: 1fr !important; }
+      .admin-topbar-right { gap: 6px !important; }
+      .admin-topbar-right span { display: none; }
+    }
   </style>
 </head>
 <body>
@@ -376,8 +419,8 @@ function Layout({ user, page, setPage, onLogout, children }) {
     <div style={{display:"flex",minHeight:"100vh",background:C.cinzaClaro,fontFamily:"'Open Sans',sans-serif"}}>
 
       {/* Sidebar */}
-      <aside style={{width:200,background:C.azulEscuro,display:"flex",flexDirection:"column",flexShrink:0,
-        boxShadow:"4px 0 20px rgba(0,0,0,.18)"}}>
+      <aside className="admin-sidebar" style={{width:200,background:C.azulEscuro,display:"flex",flexDirection:"column",flexShrink:0,
+        boxShadow:"4px 0 20px rgba(0,0,0,.18)",position:"relative",zIndex:100}}>
 
         {/* Logo */}
         <div style={{padding:"18px 16px 14px",borderBottom:"1px solid rgba(255,255,255,.1)"}}>
@@ -423,6 +466,10 @@ function Layout({ user, page, setPage, onLogout, children }) {
           <div style={{fontSize:12,color:"rgba(255,255,255,.8)",fontWeight:600,lineHeight:1.4}}>{user.nome_completo}</div>
         </div>
       </aside>
+
+      {/* Overlay mobile */}
+      <div className="sidebar-overlay" onClick={()=>document.querySelector('.admin-sidebar').classList.remove('aberto')}
+        style={{display:"none",position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:99}} />
 
       {/* Main */}
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
@@ -2632,6 +2679,12 @@ function GerenciarMensalidades({ showToast, user }) {
               </div>
               <Input label="Valor (R$)" value={novaForm.valor} onChange={v=>setNovaForm(p=>({...p,valor:v}))} placeholder="0,00" type="number" />
               <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <button className="menu-ham" style={{display:"none"}} onClick={()=>{
+            const sb=document.querySelector('.admin-sidebar');
+            const ov=document.querySelector('.sidebar-overlay');
+            if(sb){sb.classList.toggle('aberto');}
+            if(ov){ov.style.display=sb&&sb.classList.contains('aberto')?'block':'none';}
+          }}>☰</button>
                 <input type="checkbox" id="jaPago" checked={novaForm.pago} onChange={e=>setNovaForm(p=>({...p,pago:e.target.checked}))} style={{width:15,height:15}} />
                 <label htmlFor="jaPago" style={{fontSize:13,cursor:"pointer"}}>Marcar como já pago</label>
               </div>
@@ -3624,6 +3677,15 @@ function App() {
     </Layout>
   );
 }
+
+// Fechar sidebar ao clicar fora no mobile
+document.addEventListener('click', function(e){
+  const sb = document.querySelector('.admin-sidebar');
+  const ham = document.querySelector('.menu-ham');
+  if(sb && sb.classList.contains('aberto') && !sb.contains(e.target) && e.target !== ham){
+    sb.classList.remove('aberto');
+  }
+});
 
 // Montar o app
 const _root = ReactDOM.createRoot(document.getElementById('root'));
