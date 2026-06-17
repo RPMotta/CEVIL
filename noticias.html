@@ -10,8 +10,8 @@
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="paginas.css" />
 </head>
-<body style="overflow-x:hidden">
-<div id="modal-root" style="display:none;position:fixed;inset:0;z-index:999999;background:#fff;overflow-y:auto;"></div>
+<body>
+<div id="modal-root"></div>
 
   <div class="barra-top">
     <div class="container">
@@ -56,7 +56,7 @@
           </li>
           <li><a href="contato.html">Contato</a></li>
           <li><a href="causas.html" class="btn-doe">Doe Agora</a></li>
-          <li><a href="admin.html" style="background:#c8992a;color:#fff;padding:9px 18px;border-radius:5px;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;margin-left:6px;">🔐 Admin</a></li>
+          <li><a href="admin.html" style="background:#c8992a;color:#fff;padding:9px 18px;border-radius:5px;font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.5px;margin-left:6px;">&#x1F512; Admin</a></li>
         </ul>
       </nav>
     </div>
@@ -77,14 +77,7 @@
       <div class="divisor divisor-centro"></div>
       <h2 style="text-align:center;color:var(--azul-escuro);margin-bottom:40px;font-size:26px;">Últimas Notícias da Fundação</h2>
 
-      <!-- Notícias carregadas dinamicamente do Supabase -->
-      <div id="noticias-lista" style="display:grid;grid-template-columns:repeat(3,1fr);gap:28px;margin-bottom:50px;">
-        <div style="grid-column:1/-1;text-align:center;padding:60px 0;color:#666;">
-          <div style="font-size:40px;margin-bottom:12px;">📰</div>
-          <p>Carregando notícias...</p>
-        </div>
-      </div>
-
+      <div id="grid-noticias" style="display:grid;grid-template-columns:repeat(3,1fr);gap:28px;margin-bottom:50px;min-height:200px;"><p style="grid-column:1/-1;text-align:center;color:#999;padding:40px;">Carregando...</p></div>
       <!-- AVISO DE EDIÇÃO -->
       <div style="background:var(--cinza-claro);border-radius:12px;padding:30px;text-align:center;border-left:4px solid var(--dourado);">
         <p style="color:#666;font-size:14px;">💡 <strong>Como adicionar notícias:</strong> Copie um dos blocos de artigo acima e substitua o título, data e texto pelo conteúdo real. Para adicionar uma foto, substitua o gradiente do <code>background</code> por <code>background-image: url('imagens/sua-foto.jpg')</code>.</p>
@@ -106,128 +99,124 @@
 
   <script src="main.js"></script>
 
+<style>
+#modal-root:not(:empty) {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  width: 100%; height: 100%;
+  z-index: 999999;
+  background: #ffffff;
+  overflow-y: auto;
+  font-family: 'Open Sans', sans-serif;
+}
+</style>
 <script>
 (function(){
-  var SU="https://hnpahosgldgecwgobizb.supabase.co",SK="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhucGFob3NnbGRnZWN3Z29iaXpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5OTg3MzksImV4cCI6MjA5NjU3NDczOX0.Ux4xGVVshJpOZ0vn10YZ6seeia_m4TjwTboiKTXVkdM";
-  var H={apikey:SK,Authorization:"Bearer "+SK};
-  var CORES=["linear-gradient(135deg,#1a3a5c,#1e5fa8)","linear-gradient(135deg,#2d5a3d,#1e5fa8)",
-    "linear-gradient(135deg,#c8992a,#1a3a5c)","linear-gradient(135deg,#3a1a5c,#1e5fa8)",
-    "linear-gradient(135deg,#1a5c3a,#1a3a5c)","linear-gradient(135deg,#5c3a1a,#1e5fa8)"];
+  var SU='https://hnpahosgldgecwgobizb.supabase.co',SK='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhucGFob3NnbGRnZWN3Z29iaXpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5OTg3MzksImV4cCI6MjA5NjU3NDczOX0.Ux4xGVVshJpOZ0vn10YZ6seeia_m4TjwTboiKTXVkdM';
+  var H={apikey:SK,Authorization:'Bearer '+SK};
+  var CORES=['linear-gradient(135deg,#1a3a5c,#1e5fa8)','linear-gradient(135deg,#2d5a3d,#1e5fa8)',
+    'linear-gradient(135deg,#c8992a,#1a3a5c)','linear-gradient(135deg,#3a1a5c,#1e5fa8)',
+    'linear-gradient(135deg,#1a5c3a,#1a3a5c)','linear-gradient(135deg,#5c3a1a,#1e5fa8)'];
   var DB=[];
 
-  function fmtD(d){
-    if(!d) return "";
-    return new Date(d+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"long",year:"numeric"}).toUpperCase();
+  function fmt(d){
+    if(!d) return '';
+    return new Date(d+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'}).toUpperCase();
   }
 
-  async function carregarNoticias(){
-    var g=document.getElementById("noticias-lista"); if(!g) return;
+  async function init(){
+    var g=document.getElementById('grid-noticias');
+    if(!g){ console.error('grid-noticias nao encontrado'); return; }
     try{
-      var r=await fetch(SU+"/rest/v1/site_noticias?select=*&order=data_publicacao.desc&limit=50",{headers:H});
-      DB=await r.json();
+      var res=await fetch(SU+'/rest/v1/site_noticias?select=*&order=data_publicacao.desc&limit=50',{headers:H});
+      DB=await res.json();
+      console.log('noticias carregadas:',DB.length);
       if(!Array.isArray(DB)||!DB.length){
-        g.innerHTML="<div style='grid-column:1/-1;text-align:center;padding:60px 0;color:#666;'>"
-          +"<div style='font-size:48px;margin-bottom:12px;'>&#128237;</div>"
-          +"<p>Nenhuma noticia publicada ainda.</p></div>";
+        g.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:60px 0;color:#666;"><div style="font-size:48px;margin-bottom:12px;">&#128237;</div><p>Nenhuma noticia publicada ainda.</p></div>';
         return;
       }
       g.innerHTML=DB.map(function(n,i){
         var bg=n.imagem_url
-          ? "background-image:url("+n.imagem_url+");background-size:cover;background-position:center;"
-          : "background:"+CORES[i%CORES.length]+";";
-        var dest=n.destaque?"<span style='background:#c8992a;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:3px;text-transform:uppercase;margin-right:6px;'>Destaque</span>":"";
-        var cat=n.categoria?"<span style='font-size:11px;color:#c8992a;font-weight:700;text-transform:uppercase;'>"+n.categoria+"</span>":"";
-        return "<article data-nid='"+n.id+"' style='background:#fff;border-radius:10px;overflow:hidden;"
-          +"box-shadow:0 4px 20px rgba(0,0,0,.1);transition:transform .2s,box-shadow .2s;cursor:pointer;'>"
-          +"<div style='height:200px;"+bg+"'></div>"
-          +"<div style='padding:22px;'>"
-          +"<div style='margin-bottom:6px;'>"+dest+cat+"</div>"
-          +"<span style='font-size:11.5px;color:#c8992a;font-weight:700;text-transform:uppercase;"
-          +"letter-spacing:.5px;display:block;margin-bottom:8px;'>"+fmtD(n.data_publicacao)+"</span>"
-          +"<h3 style='font-size:17px;margin:0 0 10px;color:#1a3a5c;font-family:Merriweather,serif;'>"+n.titulo+"</h3>"
-          +"<p style='font-size:13px;color:#666;line-height:1.65;margin-bottom:14px;'>"+n.resumo+"</p>"
-          +"<span style='font-size:13px;color:#1e5fa8;font-weight:700;'>Leia mais &#x2192;</span>"
-          +"</div></article>";
-      }).join("");
+          ? 'background-image:url('+n.imagem_url+');background-size:cover;background-position:center;'
+          : 'background:'+CORES[i%CORES.length]+';';
+        return '<article data-nid="'+n.id+'" style="background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.1);cursor:pointer;transition:transform .2s;">'
+          +'<div style="height:200px;'+bg+'"></div>'
+          +'<div style="padding:22px;">'
+          +(n.destaque?'<span style="background:#c8992a;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:3px;text-transform:uppercase;">Destaque</span><br>':'')
+          +'<span style="font-size:11px;color:#c8992a;font-weight:700;display:block;margin:6px 0;">'+fmt(n.data_publicacao)+'</span>'
+          +'<h3 style="font-size:16px;margin:0 0 8px;color:#1a3a5c;font-family:Merriweather,serif;">'+n.titulo+'</h3>'
+          +'<p style="font-size:13px;color:#666;line-height:1.6;margin-bottom:12px;">'+n.resumo+'</p>'
+          +'<span style="font-size:13px;color:#1e5fa8;font-weight:700;">Leia mais &#x2192;</span>'
+          +'</div></article>';
+      }).join('');
 
-      g.addEventListener("click",function(e){
-        var a=e.target.closest("[data-nid]"); if(!a) return;
-        var n=DB.find(function(x){return x.id===parseInt(a.dataset.nid);}); if(n) abrirNoticia(n);
+      g.addEventListener('click',function(e){
+        var a=e.target.closest('[data-nid]');
+        if(!a) return;
+        var id=parseInt(a.dataset.nid);
+        var n=DB.find(function(x){return x.id===id;});
+        if(n) abrirModal(n);
       });
-      g.addEventListener("mouseover",function(e){var a=e.target.closest("[data-nid]");
-        if(a){a.style.transform="translateY(-4px)";a.style.boxShadow="0 8px 30px rgba(0,0,0,.18)";}});
-      g.addEventListener("mouseout",function(e){var a=e.target.closest("[data-nid]");
-        if(a){a.style.transform="";a.style.boxShadow="0 4px 20px rgba(0,0,0,.1)";}});
-    }catch(e){console.error("Erro noticias:",e);g.innerHTML="<div style='grid-column:1/-1;text-align:center;padding:40px;color:#c0392b;'>Erro ao carregar. Tente recarregar.</div>";}
+      g.addEventListener('mouseover',function(e){
+        var a=e.target.closest('[data-nid]');
+        if(a){a.style.transform='translateY(-4px)';}
+      });
+      g.addEventListener('mouseout',function(e){
+        var a=e.target.closest('[data-nid]');
+        if(a){a.style.transform='';}
+      });
+    }catch(err){
+      console.error('Erro:',err);
+      var g2=document.getElementById('grid-noticias');
+      if(g2) g2.innerHTML='<p style="grid-column:1/-1;text-align:center;color:red;">Erro ao carregar noticias: '+err.message+'</p>';
+    }
   }
-  // Chamar imediatamente e também no load
-  if(document.readyState==="loading"){
-    document.addEventListener("DOMContentLoaded",carregarNoticias);
+
+  // Executar assim que DOM estiver pronto
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',init);
   } else {
-    carregarNoticias();
+    init();
   }
 
-  function abrirNoticia(n){
-    var root=document.getElementById("modal-root"); if(!root) return;
-    var imgBg=n.imagem_url ? "url("+n.imagem_url+")" : "linear-gradient(135deg,#1a3a5c,#1e5fa8)";
-    var dt=n.data_publicacao ? new Date(n.data_publicacao+"T12:00:00")
-      .toLocaleDateString("pt-BR",{day:"2-digit",month:"long",year:"numeric"}) : "";
-    var dest=n.destaque?"<span style='background:#c8992a;color:#fff;font-size:11px;font-weight:700;"
-      +"padding:3px 12px;border-radius:3px;text-transform:uppercase;margin-right:8px;'>Destaque</span>":"";
-    var cat=n.categoria?"<span style='font-size:12px;color:#c8992a;font-weight:700;text-transform:uppercase;'>"+n.categoria+"</span>":"";
-    // Limpar conteúdo — só usar o texto direto sem HTML externo
-    var corpo="";
+  function abrirModal(n){
+    var root=document.getElementById('modal-root');
+    if(!root) return;
+    var imgBg=n.imagem_url?'url('+n.imagem_url+')':'linear-gradient(135deg,#1a3a5c,#1e5fa8)';
+    var dt=n.data_publicacao?new Date(n.data_publicacao+'T12:00:00').toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'}):'';
+    // Extrair texto puro do conteudo
+    var corpo='';
     if(n.conteudo){
-      var tmp=document.createElement("div"); tmp.innerHTML=n.conteudo;
-      var texto=tmp.textContent||tmp.innerText||"";
-      // Dividir em parágrafos pelos 
-
-
-      var pars=texto.split(/
-{2,}/).filter(function(p){return p.trim().length>30;});
-      corpo=pars.length>0
-        ? pars.map(function(p){return "<p style='font-size:16px;line-height:1.9;color:#444;margin-bottom:20px;'>"
-          +p.trim()+"</p>";}).join("")
-        : "<p style='font-size:16px;line-height:1.9;color:#444;'>"+texto+"</p>";
+      var div=document.createElement('div');
+      div.innerHTML=n.conteudo;
+      var txt=div.textContent||div.innerText||'';
+      corpo='<p style="font-size:16px;line-height:1.9;color:#444;white-space:pre-line;">'+txt.trim()+'</p>';
     }
     root.innerHTML=
-      // Capa com imagem
-      "<div style='width:100%;height:400px;background:"+imgBg+";background-size:cover;background-position:center;position:relative;flex-shrink:0;'>"
-      +"<div style='position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.1),rgba(0,0,0,.8));'></div>"
-      +"<div style='position:absolute;top:20px;left:24px;'>"
-      +"<button onclick='window.fecharNoticia()' style='"
-      +"background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.4);color:#fff;padding:9px 22px;"
-      +"border-radius:24px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:600;'"
-      +">&#8592; Voltar</button>"
-      +"</div>"
-      +"<div style='position:absolute;bottom:32px;left:50%;transform:translateX(-50%);"
-      +"width:100%;max-width:800px;padding:0 24px;box-sizing:border-box;'>"
-      +"<div style='margin-bottom:10px;'>"+dest+cat+"</div>"
-      +"<h1 style='font-family:Merriweather,serif;font-size:26px;color:#fff;line-height:1.35;"
-      +"margin:0 0 10px;text-shadow:0 2px 10px rgba(0,0,0,.7);'>"+n.titulo+"</h1>"
-      +"<span style='font-size:13px;color:rgba(255,255,255,.8);'>&#128197; "+dt+"</span>"
-      +"</div></div>"
-      // Conteúdo da notícia
-      +"<div style='max-width:740px;margin:0 auto;padding:36px 24px 80px;font-family:Open Sans,sans-serif;'>"
-      +"<p style='font-size:17px;line-height:1.8;color:#333;font-weight:500;"
-      +"border-left:4px solid #c8992a;padding-left:18px;margin:0 0 28px;'>"+n.resumo+"</p>"
+      '<div style="width:100%;height:380px;background:'+imgBg+';background-size:cover;background-position:center;position:relative;">'
+      +'<div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.1),rgba(0,0,0,.8));"></div>'
+      +'<button onclick="fecharModal()" style="position:absolute;top:18px;left:18px;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.4);color:#fff;padding:8px 20px;border-radius:20px;font-size:13px;cursor:pointer;font-weight:600;">&#x2190; Voltar</button>'
+      +'<div style="position:absolute;bottom:30px;left:50%;transform:translateX(-50%);width:100%;max-width:800px;padding:0 24px;box-sizing:border-box;">'
+      +(n.destaque?'<span style="background:#c8992a;color:#fff;font-size:10px;font-weight:700;padding:2px 10px;border-radius:3px;text-transform:uppercase;margin-bottom:8px;display:inline-block;">Destaque</span><br>':'')
+      +'<h1 style="font-family:Merriweather,serif;font-size:26px;color:#fff;line-height:1.35;margin:0 0 8px;text-shadow:0 2px 8px rgba(0,0,0,.7);">'+n.titulo+'</h1>'
+      +'<span style="font-size:12px;color:rgba(255,255,255,.8);">&#128197; '+dt+'</span>'
+      +'</div></div>'
+      +'<div style="max-width:740px;margin:0 auto;padding:36px 24px 80px;">'
+      +'<blockquote style="font-size:17px;line-height:1.8;color:#333;border-left:4px solid #c8992a;padding-left:18px;margin:0 0 28px;font-weight:500;">'+n.resumo+'</blockquote>'
       +corpo
-      +"<div style='margin-top:40px;padding-top:20px;border-top:1px solid #eee;'>"  
-      +"<button onclick='window.fecharNoticia()' style='background:#1a3a5c;color:#fff;border:none;"
-      +"padding:12px 28px;border-radius:6px;font-size:14px;cursor:pointer;font-family:inherit;font-weight:600;'"
-      +">&#8592; Voltar &#xe0;s Not&#xed;cias</button>"
-      +"</div></div>";
-    root.style.display="block";
+      +'<div style="margin-top:40px;border-top:1px solid #eee;padding-top:20px;">'
+      +'<button onclick="fecharModal()" style="background:#1a3a5c;color:#fff;border:none;padding:11px 26px;border-radius:6px;font-size:14px;cursor:pointer;font-weight:600;">&#x2190; Voltar &agrave;s Not&iacute;cias</button>'
+      +'</div></div>';
+    document.body.style.overflow='hidden';
     root.scrollTop=0;
-    document.body.style.overflow="hidden";
   }
 
-  window.fecharNoticia=function(){
-    var root=document.getElementById("modal-root");
-    if(root){root.style.display="none";root.innerHTML="";}
-    document.body.style.overflow="";
+  window.fecharModal=function(){
+    var root=document.getElementById('modal-root');
+    if(root) root.innerHTML='';
+    document.body.style.overflow='';
   };
-  document.addEventListener("keydown",function(e){if(e.key==="Escape") window.fecharNoticia();});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape') window.fecharModal();});
 })();
 </script>
 </body>
