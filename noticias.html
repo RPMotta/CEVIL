@@ -11,6 +11,7 @@
   <link rel="stylesheet" href="paginas.css" />
 </head>
 <body style="overflow-x:hidden">
+<div id="modal-root" style="display:none;position:fixed;inset:0;z-index:999999;background:#fff;overflow-y:auto;"></div>
 
   <div class="barra-top">
     <div class="container">
@@ -105,119 +106,123 @@
 
   <script src="main.js"></script>
 
-
 <script>
 (function(){
-  var SUPA_URL="https://hnpahosgldgecwgobizb.supabase.co";
-  var SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhucGFob3NnbGRnZWN3Z29iaXpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5OTg3MzksImV4cCI6MjA5NjU3NDczOX0.Ux4xGVVshJpOZ0vn10YZ6seeia_m4TjwTboiKTXVkdM";
-  var H={apikey:SUPA_KEY,Authorization:"Bearer "+SUPA_KEY};
+  var SU="https://hnpahosgldgecwgobizb.supabase.co",SK="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhucGFob3NnbGRnZWN3Z29iaXpiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA5OTg3MzksImV4cCI6MjA5NjU3NDczOX0.Ux4xGVVshJpOZ0vn10YZ6seeia_m4TjwTboiKTXVkdM";
+  var H={apikey:SK,Authorization:"Bearer "+SK};
   var CORES=["linear-gradient(135deg,#1a3a5c,#1e5fa8)","linear-gradient(135deg,#2d5a3d,#1e5fa8)",
     "linear-gradient(135deg,#c8992a,#1a3a5c)","linear-gradient(135deg,#3a1a5c,#1e5fa8)",
     "linear-gradient(135deg,#1a5c3a,#1a3a5c)","linear-gradient(135deg,#5c3a1a,#1e5fa8)"];
+  var DB=[];
 
-  // Armazenar notícias para o modal
-  var todasNoticias = [];
-
-  function formatarData(d){
+  function fmtD(d){
     if(!d) return "";
     return new Date(d+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"long",year:"numeric"}).toUpperCase();
   }
 
-  window.addEventListener("load", async function(){
-    var grid = document.getElementById("noticias-lista");
-    if(!grid) return;
-    try {
-      var res = await fetch(SUPA_URL+"/rest/v1/site_noticias?select=*&order=data_publicacao.desc&limit=50",{headers:H});
-      todasNoticias = await res.json();
-      if(!Array.isArray(todasNoticias)||!todasNoticias.length){
-        grid.innerHTML='<div style="grid-column:1/-1;text-align:center;padding:60px 0;color:#666;font-family:Open Sans,sans-serif;"><div style="font-size:48px;margin-bottom:12px;">📭</div><p>Nenhuma notícia publicada ainda.</p></div>';
+  window.addEventListener("load",async function(){
+    var g=document.getElementById("noticias-lista"); if(!g) return;
+    try{
+      var r=await fetch(SU+"/rest/v1/site_noticias?select=*&order=data_publicacao.desc&limit=50",{headers:H});
+      DB=await r.json();
+      if(!Array.isArray(DB)||!DB.length){
+        g.innerHTML="<div style='grid-column:1/-1;text-align:center;padding:60px 0;color:#666;'>"
+          +"<div style='font-size:48px;margin-bottom:12px;'>&#128237;</div>"
+          +"<p>Nenhuma noticia publicada ainda.</p></div>";
         return;
       }
-      grid.style.display = "grid";
-      grid.innerHTML = todasNoticias.map(function(n,i){
-        var bg = n.imagem_url
+      g.innerHTML=DB.map(function(n,i){
+        var bg=n.imagem_url
           ? "background-image:url("+n.imagem_url+");background-size:cover;background-position:center;"
           : "background:"+CORES[i%CORES.length]+";";
-        var dest = n.destaque ? "<span style='background:#c8992a;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:3px;text-transform:uppercase;margin-right:6px;'>Destaque</span>" : "";
-        var cat  = n.categoria ? "<span style='font-size:11px;color:#c8992a;font-weight:700;text-transform:uppercase;'>"+n.categoria+"</span>" : "";
-        return "<article data-id='"+n.id+"' style='background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.1);transition:all .3s;cursor:pointer;'>"
+        var dest=n.destaque?"<span style='background:#c8992a;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:3px;text-transform:uppercase;margin-right:6px;'>Destaque</span>":"";
+        var cat=n.categoria?"<span style='font-size:11px;color:#c8992a;font-weight:700;text-transform:uppercase;'>"+n.categoria+"</span>":"";
+        return "<article data-nid='"+n.id+"' style='background:#fff;border-radius:10px;overflow:hidden;"
+          +"box-shadow:0 4px 20px rgba(0,0,0,.1);transition:transform .2s,box-shadow .2s;cursor:pointer;'>"
           +"<div style='height:200px;"+bg+"'></div>"
           +"<div style='padding:22px;'>"
           +"<div style='margin-bottom:6px;'>"+dest+cat+"</div>"
-          +"<span style='font-size:11.5px;color:#c8992a;font-weight:700;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:8px;'>"+formatarData(n.data_publicacao)+"</span>"
+          +"<span style='font-size:11.5px;color:#c8992a;font-weight:700;text-transform:uppercase;"
+          +"letter-spacing:.5px;display:block;margin-bottom:8px;'>"+fmtD(n.data_publicacao)+"</span>"
           +"<h3 style='font-size:17px;margin:0 0 10px;color:#1a3a5c;font-family:Merriweather,serif;'>"+n.titulo+"</h3>"
           +"<p style='font-size:13px;color:#666;line-height:1.65;margin-bottom:14px;'>"+n.resumo+"</p>"
-          +"<span style='font-size:13px;color:#1e5fa8;font-weight:700;'>Leia mais →</span>"
+          +"<span style='font-size:13px;color:#1e5fa8;font-weight:700;'>Leia mais &#x2192;</span>"
           +"</div></article>";
       }).join("");
 
-      // Adicionar click via event delegation
-      grid.addEventListener("click", function(e){
-        var art = e.target.closest("article[data-id]");
-        if(!art) return;
-        var id = parseInt(art.dataset.id);
-        var noticia = todasNoticias.find(function(n){ return n.id===id; });
-        if(noticia) abrirNoticia(noticia);
+      g.addEventListener("click",function(e){
+        var a=e.target.closest("[data-nid]"); if(!a) return;
+        var n=DB.find(function(x){return x.id===parseInt(a.dataset.nid);}); if(n) abrirNoticia(n);
       });
-
-      // Hover effect
-      grid.addEventListener("mouseover", function(e){
-        var art = e.target.closest("article[data-id]");
-        if(art){ art.style.transform="translateY(-4px)"; art.style.boxShadow="0 8px 30px rgba(0,0,0,.18)"; }
-      });
-      grid.addEventListener("mouseout", function(e){
-        var art = e.target.closest("article[data-id]");
-        if(art){ art.style.transform=""; art.style.boxShadow="0 4px 20px rgba(0,0,0,.1)"; }
-      });
-
-    } catch(e) { console.error("Erro ao carregar notícias:", e); }
+      g.addEventListener("mouseover",function(e){var a=e.target.closest("[data-nid]");
+        if(a){a.style.transform="translateY(-4px)";a.style.boxShadow="0 8px 30px rgba(0,0,0,.18)";}});
+      g.addEventListener("mouseout",function(e){var a=e.target.closest("[data-nid]");
+        if(a){a.style.transform="";a.style.boxShadow="0 4px 20px rgba(0,0,0,.1)";}});
+    }catch(e){console.error(e);}
   });
 
   function abrirNoticia(n){
-    var bg = n.imagem_url ? "url('"+n.imagem_url+"')" : "linear-gradient(135deg,#1a3a5c,#1e5fa8)";
-    var data = n.data_publicacao ? new Date(n.data_publicacao+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"long",year:"numeric"}) : "";
-    var dest = n.destaque ? "<span style='background:#c8992a;color:#fff;font-size:11px;font-weight:700;padding:3px 12px;border-radius:3px;text-transform:uppercase;margin-right:8px;'>Destaque</span>" : "";
-    var cat  = n.categoria ? "<span style='font-size:12px;color:#c8992a;font-weight:700;text-transform:uppercase;'>"+n.categoria+"</span>" : "";
-    var conteudo = n.conteudo
-      ? "<div style='font-size:16px;line-height:1.9;color:#444;margin-top:24px;'>"+n.conteudo+"</div>"
-      : "";
+    var root=document.getElementById("modal-root"); if(!root) return;
+    var imgBg=n.imagem_url ? "url("+n.imagem_url+")" : "linear-gradient(135deg,#1a3a5c,#1e5fa8)";
+    var dt=n.data_publicacao ? new Date(n.data_publicacao+"T12:00:00")
+      .toLocaleDateString("pt-BR",{day:"2-digit",month:"long",year:"numeric"}) : "";
+    var dest=n.destaque?"<span style='background:#c8992a;color:#fff;font-size:11px;font-weight:700;"
+      +"padding:3px 12px;border-radius:3px;text-transform:uppercase;margin-right:8px;'>Destaque</span>":"";
+    var cat=n.categoria?"<span style='font-size:12px;color:#c8992a;font-weight:700;text-transform:uppercase;'>"+n.categoria+"</span>":"";
+    // Limpar conteúdo — só usar o texto direto sem HTML externo
+    var corpo="";
+    if(n.conteudo){
+      var tmp=document.createElement("div"); tmp.innerHTML=n.conteudo;
+      var texto=tmp.textContent||tmp.innerText||"";
+      // Dividir em parágrafos pelos 
 
-    var modal = document.createElement("div");
-    modal.id = "modal-noticia";
-    modal.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;overflow-y:auto;background:#fff;font-family:Open Sans,sans-serif;margin:0;padding:0;";
-    document.documentElement.style.overflow = "hidden";
-    modal.innerHTML =
-      "<div style='width:100%;height:420px;background:"+bg+";background-size:cover;background-position:center;position:relative;'>"
-      +"<div style='position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.2),rgba(0,0,0,.72));'></div>"
-      +"<div style='position:absolute;top:20px;left:20px;'>"
-      +"<button onclick='fecharNoticia()' style='background:rgba(255,255,255,.15);backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,.3);color:#fff;padding:8px 20px;border-radius:24px;font-size:13px;cursor:pointer;font-family:inherit;'>← Voltar</button>"
+
+      var pars=texto.split(/
+{2,}/).filter(function(p){return p.trim().length>30;});
+      corpo=pars.length>0
+        ? pars.map(function(p){return "<p style='font-size:16px;line-height:1.9;color:#444;margin-bottom:20px;'>"
+          +p.trim()+"</p>";}).join("")
+        : "<p style='font-size:16px;line-height:1.9;color:#444;'>"+texto+"</p>";
+    }
+    root.innerHTML=
+      // Capa com imagem
+      "<div style='width:100%;height:400px;background:"+imgBg+";background-size:cover;background-position:center;position:relative;flex-shrink:0;'>"
+      +"<div style='position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.1),rgba(0,0,0,.8));'></div>"
+      +"<div style='position:absolute;top:20px;left:24px;'>"
+      +"<button onclick='window.fecharNoticia()' style='"
+      +"background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.4);color:#fff;padding:9px 22px;"
+      +"border-radius:24px;font-size:13px;cursor:pointer;font-family:inherit;font-weight:600;'"
+      +">&#8592; Voltar</button>"
       +"</div>"
-      +"<div style='position:absolute;bottom:40px;left:50%;transform:translateX(-50%);width:100%;max-width:820px;padding:0 24px;'>"
+      +"<div style='position:absolute;bottom:32px;left:50%;transform:translateX(-50%);"
+      +"width:100%;max-width:800px;padding:0 24px;box-sizing:border-box;'>"
       +"<div style='margin-bottom:10px;'>"+dest+cat+"</div>"
-      +"<h1 style='font-family:Merriweather,serif;font-size:30px;color:#fff;line-height:1.3;margin:0 0 12px;text-shadow:0 2px 8px rgba(0,0,0,.5);'>"+n.titulo+"</h1>"
-      +"<span style='font-size:13px;color:rgba(255,255,255,.75);'>📅 "+data+"</span>"
-      +"</div>"
-      +"</div>"
-      +"<div style='max-width:760px;margin:0 auto;padding:40px 24px 80px;'>"
-      +"<p style='font-size:17px;line-height:1.8;color:#333;font-weight:500;border-left:4px solid #c8992a;padding-left:20px;margin-bottom:28px;'>"+n.resumo+"</p>"
-      +conteudo
-      +"<div style='margin-top:48px;padding-top:28px;border-top:1px solid #eee;display:flex;gap:12px;align-items:center;flex-wrap:wrap;'>"
-      +"<button onclick='fecharNoticia()' style='background:#1a3a5c;color:#fff;border:none;padding:12px 28px;border-radius:6px;font-size:14px;cursor:pointer;font-family:inherit;font-weight:600;'>← Voltar às Notícias</button>"
-      +"<span style='font-size:13px;color:#999;'>Associação CEVIL – Casa de Esperança Viveiro de Luz</span>"
+      +"<h1 style='font-family:Merriweather,serif;font-size:26px;color:#fff;line-height:1.35;"
+      +"margin:0 0 10px;text-shadow:0 2px 10px rgba(0,0,0,.7);'>"+n.titulo+"</h1>"
+      +"<span style='font-size:13px;color:rgba(255,255,255,.8);'>&#128197; "+dt+"</span>"
+      +"</div></div>"
+      // Conteúdo da notícia
+      +"<div style='max-width:740px;margin:0 auto;padding:36px 24px 80px;font-family:Open Sans,sans-serif;'>"
+      +"<p style='font-size:17px;line-height:1.8;color:#333;font-weight:500;"
+      +"border-left:4px solid #c8992a;padding-left:18px;margin:0 0 28px;'>"+n.resumo+"</p>"
+      +corpo
+      +"<div style='margin-top:40px;padding-top:20px;border-top:1px solid #eee;'>"  
+      +"<button onclick='window.fecharNoticia()' style='background:#1a3a5c;color:#fff;border:none;"
+      +"padding:12px 28px;border-radius:6px;font-size:14px;cursor:pointer;font-family:inherit;font-weight:600;'"
+      +">&#8592; Voltar &#xe0;s Not&#xed;cias</button>"
       +"</div></div>";
-    document.body.appendChild(modal);
+    root.style.display="block";
+    root.scrollTop=0;
     document.body.style.overflow="hidden";
-    window.scrollTo(0,0);
   }
 
-  window.fecharNoticia = function(){
-    var m=document.getElementById("modal-noticia");
-    if(m){ m.remove(); document.body.style.overflow=""; document.documentElement.style.overflow=""; }
+  window.fecharNoticia=function(){
+    var root=document.getElementById("modal-root");
+    if(root){root.style.display="none";root.innerHTML="";}
+    document.body.style.overflow="";
   };
-
-  document.addEventListener("keydown",function(e){ if(e.key==="Escape") fecharNoticia(); });
+  document.addEventListener("keydown",function(e){if(e.key==="Escape") window.fecharNoticia();});
 })();
 </script>
-
 </body>
 </html>
