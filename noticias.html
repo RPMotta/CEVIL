@@ -184,7 +184,8 @@
 
     var modal = document.createElement("div");
     modal.id = "modal-noticia";
-    modal.style.cssText = "position:fixed;inset:0;z-index:9999;overflow-y:auto;background:#fff;font-family:Open Sans,sans-serif;";
+    modal.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;overflow-y:auto;background:#fff;font-family:Open Sans,sans-serif;margin:0;padding:0;";
+    document.documentElement.style.overflow = "hidden";
     modal.innerHTML =
       "<div style='width:100%;height:420px;background:"+bg+";background-size:cover;background-position:center;position:relative;'>"
       +"<div style='position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,.2),rgba(0,0,0,.72));'></div>"
@@ -211,7 +212,7 @@
 
   window.fecharNoticia = function(){
     var m=document.getElementById("modal-noticia");
-    if(m){ m.remove(); document.body.style.overflow=""; }
+    if(m){ m.remove(); document.body.style.overflow=""; document.documentElement.style.overflow=""; }
   };
 
   document.addEventListener("keydown",function(e){ if(e.key==="Escape") fecharNoticia(); });
