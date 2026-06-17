@@ -120,7 +120,7 @@
     return new Date(d+"T12:00:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"long",year:"numeric"}).toUpperCase();
   }
 
-  window.addEventListener("load",async function(){
+  async function carregarNoticias(){
     var g=document.getElementById("noticias-lista"); if(!g) return;
     try{
       var r=await fetch(SU+"/rest/v1/site_noticias?select=*&order=data_publicacao.desc&limit=50",{headers:H});
@@ -158,8 +158,14 @@
         if(a){a.style.transform="translateY(-4px)";a.style.boxShadow="0 8px 30px rgba(0,0,0,.18)";}});
       g.addEventListener("mouseout",function(e){var a=e.target.closest("[data-nid]");
         if(a){a.style.transform="";a.style.boxShadow="0 4px 20px rgba(0,0,0,.1)";}});
-    }catch(e){console.error(e);}
-  });
+    }catch(e){console.error("Erro noticias:",e);g.innerHTML="<div style='grid-column:1/-1;text-align:center;padding:40px;color:#c0392b;'>Erro ao carregar. Tente recarregar.</div>";}
+  }
+  // Chamar imediatamente e também no load
+  if(document.readyState==="loading"){
+    document.addEventListener("DOMContentLoaded",carregarNoticias);
+  } else {
+    carregarNoticias();
+  }
 
   function abrirNoticia(n){
     var root=document.getElementById("modal-root"); if(!root) return;
